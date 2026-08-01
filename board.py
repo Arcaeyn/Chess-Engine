@@ -1,3 +1,20 @@
+ # Valid Directions
+        ROOK_DIRECTIONS = [
+            (1, 0),    # up
+            (-1, 0),   # down
+            (0, 1),    # right
+            (0, -1)    # left
+        ]
+
+        BISHOP_DIRECTIONS = [
+            (1, 1),    # up-right
+            (1, -1),   # up-left
+            (-1, 1),   # down-right
+            (-1, -1)   # down-left
+        ]
+
+        QUEEN_DIRECTIONS = ROOK_DIRECTIONS + BISHOP_DIRECTIONS
+
 class Board:
     def __init__(self):
         # White pieces
@@ -16,6 +33,7 @@ class Board:
         self.black_queens  = 0x0800000000000000
         self.black_kings   = 0x1000000000000000
 
+        # Piece Names
         self.piece_names = [
             "white_pawns", "black_pawns",
             "white_rooks", "black_rooks",
@@ -24,6 +42,25 @@ class Board:
             "white_queens", "black_queens",
             "white_kings", "black_kings"
         ]
+
+        # Other Properties We Will Need
+        self.kingInCheck = False
+        self.whiteToMove = True
+
+
+    @property
+    def white_pieces(self):
+        return (self.white_rooks | self.white_knights | self.white_bishops | self.white_queens | self.white_kings | self.white_pawns)
+
+    @property 
+    def black_pieces(self):
+        return (self.black_rooks | self.black_knights | self.black_bishops | self.black_queens | self.black_kings | self.black_pawns)
+
+    @property
+    def occupied(self):
+        return (self.white_pieces | self.black_peices)
+
+
 
     def resetBoard(self):
          # White pieces
@@ -43,13 +80,11 @@ class Board:
         self.black_kings   = 0x1000000000000000
 
     def pieceColor(self, rank, file):
-        whiteMask = self.white_rooks | self.white_knights | self.white_bishops | self.white_queens | self.white_kings | self.white_pawns
-        blackMask = self.black_rooks | self.black_knights | self.black_bishops | self.black_queens | self.black_kings | self.black_pawns
         pieceMask = 1 << ((rank - 1) * 8 + (file - 1))
-        if pieceMask & whiteMask:
+        if pieceMask & self.white_pieces:
             return "w"
 
-        if pieceMask & blackMask:
+        if pieceMask & self.black_pieces:
             return "b"
 
         return False
@@ -75,6 +110,10 @@ class Board:
                 return True
             
         return False
+
+    def getPiece(self, rank, file):
+        pieceMask = 1 << ((rank - 1) * 8 + (file - 1))
+        return
 
     def getKnightMoves(self, rank, file, color="w"):
         KNIGHT_MOVES = [(2, 1), (2, -1),
@@ -118,19 +157,67 @@ class Board:
         return pawnMoves
 
     def getRookMoves(self, rank, file, color="w"):
-        return
+        if color == "w":
+            return self.sliding_moves(rank, file, self.white_pieces, self.black_pieces, ROOK_DIRECTIONS)
 
-        
+        else:
+            return self.sliding_moves(rank, file, self.black_pieces, self.white_pieces, ROOK_DIRECTIONS)
+
+    def getBishopMoves(self, rank, file, color="w"):
+            if color == "w":
+                return self.sliding_moves(rank, file, self.white_pieces, self.black_pieces, BISHOP_DIRECTIONS)
+    
+            else:
+                return self.sliding_moves(rank, file, self.black_pieces, self.white_pieces, BISHOP_DIRECTIONS)
+
+    def getQueenMoves(self, rank, file, color="w"):
+        if color == "w":
+            return self.sliding_moves(rank, file, self.white_pieces, self.black_pieces, QUEEN_DIRECTIONS)
+
+        else:
+            return self.sliding_moves(rank, file, self.black_pieces, self.white_pieces, QUEEN_DIRECTIONS)
+
+
+    def sliding_moves(self, rank, file, friendly_pieces, enemy_pieces, directions):
+        moves = 0
+
+        for rank_change, file_change in directions:
+            new_rank = rank + rank_change
+            new_file = file + file_change
+
+            while 0 <= new_rank < 8 and 0 <= new_file < 8:
+                square = new_rank * 8 + new_file
+                mask = 1 << square
+
+                # Your own piece blocks the path
+                if friendly_pieces & mask:
+                    break
+
+                # Empty or enemy square is a possible move
+                moves |= mask
+
+                # You can capture an enemy, but cannot move through it
+                if enemy_pieces & mask:
+                    break
+
+                new_rank += rank_change
+                new_file += file_change
+
+        return moves
             
+    
+
+    
         
-        
-                        
+    
+    
+                    
 
 
 
 
 
-        
-        
+    
+    
 
 

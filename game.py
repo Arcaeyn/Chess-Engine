@@ -26,7 +26,7 @@ pygame.display.set_caption("Chess Engine")
 # Loading our assets, the board is drawn by the program so we just need to worry about piece images
 def load_piece_image(filename):
     image = pygame.image.load(
-        f"chess/pieces-basic-png/{filename}"
+        f"pieces-basic-png/{filename}"
     ).convert_alpha()
 
     piece_size = SQUARESIZE - (PADDING * 2)
@@ -229,11 +229,16 @@ while running:
     # Logic to Handle Moving Pieces
     # This just highlights the selected Piece, it unhilights once a turn changes maybe I need to fix this
     if selected:
-        highlightBitBoard(peices.getPawnMoves(selRank, selFile))
+        highlightBitBoard(peices.getPseduoLegalMoves(selRank, selFile))
         highlightSquare(selRank, selFile)
 
+    # Check if a move is legal before allowing it
+    legalMove = False
+    if placed:
+        legalMove = peices.moveIsLegal(selRank, selFile, destRank, destFile)
+
     # This will handle moving/placing a white piece
-    if placed and whiteToMove and peices.pieceColor(selRank, selFile) == "w":
+    if placed and whiteToMove and peices.pieceColor(selRank, selFile) == "w" and legalMove:
         placed = False
         selected = False
         whiteToMove = False
@@ -242,7 +247,7 @@ while running:
         highlightSquare(destRank, destFile)
 
     # And this handles black pieces being moved
-    elif placed and not whiteToMove and peices.pieceColor(selRank, selFile) == "b":
+    elif placed and not whiteToMove and peices.pieceColor(selRank, selFile) == "b" and legalMove:
         placed = False
         selected = False
         whiteToMove = True

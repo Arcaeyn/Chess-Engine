@@ -93,27 +93,73 @@ class Board:
         selectedMask = 1 << ((rank - 1) * 8 + (file - 1))
         destMask = 1 << ((destRank - 1) * 8 + (destFile - 1))
 
-        # Remove any Piece in destination
-        for piece_name in self.piece_names:
-            piece = getattr(self, piece_name)
-            if piece & destMask:
-                piece ^= destMask
-                setattr(self, piece_name, piece)
+        moving_piece_name = None
 
-        # Make Move
+        # First find the piece being moved
         for piece_name in self.piece_names:
-            piece = getattr(self, piece_name)
-            if piece & selectedMask:
-                piece ^= selectedMask
-                piece |= destMask
-                setattr(self, piece_name, piece)
-                return True
-            
-        return False
+            if getattr(self, piece_name) & selectedMask:
+                moving_piece_name = piece_name
+                break
+
+        # Nothing exists on the selected square
+        if moving_piece_name is None:
+            return False
+
+        # Remove a captured piece
+        for piece_name in self.piece_names:
+            piece_bitboard = getattr(self, piece_name)
+
+            if piece_bitboard & destMask:
+                piece_bitboard &= ~destMask
+                setattr(self, piece_name, piece_bitboard)
+                break
+
+        # Move selected piece
+        moving_bitboard = getattr(self, moving_piece_name)
+        moving_bitboard &= ~selectedMask
+        moving_bitboard |= destMask
+        setattr(self, moving_piece_name, moving_bitboard)
+
+        return True
 
     def getPiece(self, rank, file):
         pieceMask = 1 << ((rank - 1) * 8 + (file - 1))
-        return
+        for piece_name in self.piece_names:
+            piece = getattr(self, piece_name)
+            if piece & pieceMask:
+                return piece_name
+            
+        return None
+
+    def getPseduoLegalMoves(self, rank, file):
+        pieceName = self.getPiece(rank, file)
+
+        if pieceName is None:
+            return 0
+        
+        color = pieceName[0]
+
+        if "bishop" in pieceName:
+            return self.getBishopMoves(rank, file, color)
+        
+        if "knight" in pieceName:
+            return self.getKnightMoves(rank, file, color[0])
+        
+        if "rook" in pieceName:
+            return self.getRookMoves(rank, file, color[0])
+        
+        if "queen" in pieceName:
+            return self.getQueenMoves(rank, file, color[0])
+        
+        if "pawn" in pieceName:
+            return self.getPawnMoves(rank, file, color[0])
+        
+        return 0
+
+    def moveIsLegal(self, rank, file, destRank, destFile):
+        destMask = 1 << ((destRank - 1) * 8 + (destFile - 1))
+        return bool(self.getPseduoLegalMoves(rank, file) & destMask)
+    
 
     def getKnightMoves(self, rank, file, color="w"):
         KNIGHT_MOVES = [(2, 1), (2, -1),
@@ -124,7 +170,6 @@ class Board:
         knightMoves = 0
         for move in KNIGHT_MOVES:
             if rank + move[0] > 0 and rank + move[0] < 9 and file + move[1] > 0 and file + move[1] < 9 and self.pieceColor(rank + move[0], file + move[1]) != color:
-                print(self.pieceColor(rank + move[0], file + move[1]))
                 moveMask = 1 << (((rank + move[0]) - 1) * 8 + ((file + move[1]) - 1))
                 knightMoves |= moveMask
 
@@ -136,9 +181,9 @@ class Board:
         pawnMoves = 0
         if color == "b":
             if rank == 7:
-                moves = [1, 2]
+                moves = [-1, -2]
             else:
-                moves = [1]
+                moves = [-1]
             dir = -1
 
         else:
@@ -177,7 +222,6 @@ class Board:
         else:
             return self.sliding_moves(rank, file, self.black_pieces, self.white_pieces, QUEEN_DIRECTIONS)
 
-
     def sliding_moves(self, rank, file, friendly_pieces, enemy_pieces, directions):
         moves = 0
 
@@ -185,9 +229,8 @@ class Board:
             new_rank = rank + rank_change
             new_file = file + file_change
 
-            while 0 <= new_rank < 8 and 0 <= new_file < 8:
-                square = new_rank * 8 + new_file
-                mask = 1 << square
+            while 0 < new_rank < 9 and 0 < new_file < 9:
+                mask = 1 << ((new_rank - 1) * 8 + (new_file - 1))
 
                 # Your own piece blocks the path
                 if friendly_pieces & mask:

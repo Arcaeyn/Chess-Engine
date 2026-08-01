@@ -29,6 +29,9 @@ class Move:
     is_castle: bool = False
     is_en_passant: bool = False
 
+    moved_piece: str | None = None
+    captured_peice: str | None = None
+
 
 class GameState:
     def __init__(self):
@@ -140,35 +143,67 @@ class GameState:
             move.end_file,
         )
 
-        moving_piece_name = self.getPiece(
+        move.moved_piece = self.getPiece(
             move.start_rank,
             move.start_file,
         )
 
-        if moving_piece_name is None:
+
+        if move.moved_piece is None:
             return False
 
         # Remove a captured piece from the destination.
-        captured_piece_name = self.getPiece(
+        move.captured_piece = self.getPiece(
             move.end_rank,
             move.end_file,
         )
 
-        if captured_piece_name is not None:
-            captured_bitboard = getattr(self, captured_piece_name)
+        if move.captured_piece is not None:
+            captured_bitboard = getattr(self, move.captured_piece)
             captured_bitboard &= ~destination_mask
-            setattr(self, captured_piece_name, captured_bitboard)
+            setattr(self, move.captured_piece, captured_bitboard)
 
         # Remove the moving piece from its starting square.
-        moving_bitboard = getattr(self, moving_piece_name)
+        moving_bitboard = getattr(self, move.moved_piece)
         moving_bitboard &= ~selected_mask
 
         # Place it on the destination square.
         moving_bitboard |= destination_mask
-        setattr(self, moving_piece_name, moving_bitboard)
+        setattr(self, move.moved_piece, moving_bitboard)
 
         self.move_history.append(move)
         self.white_to_move = not self.white_to_move
+
+        return True
+
+    def undoMove(self, move):
+        selected_mask = self.squareMask(
+            move.start_rank,
+            move.start_file,
+        )
+
+        destination_mask = self.squareMask(
+            move.end_rank,
+            move.end_file,
+        )
+        
+        # Replace any captured piece
+        if move.captured_piece:
+            captured_bitboard = getattr(self, move.captured_piece)
+            captured_bitboard |= destination_mask
+            setattr(self, move.captured_piece, captured_bitboard)
+
+        # Remove the movied piece from the destination square and then place it back onto the selected square
+        moving_bitboard = getattr(self, move.moved_piece)
+        moving_bitboard &= ~destination_mask
+        moving_bitboard |= selected_mask
+        setattr(self, move.moved_piece, moving_bitboard)
+
+        # Update state
+        # Remove this move from the history as we are undoing it, also update whose move 
+        self.move_history.pop(-1)
+        self.white_to_move = not self.white_to_move
+
 
         return True
 
@@ -207,6 +242,9 @@ class GameState:
 
         if "pawn" in piece_name:
             return self.getPawnMoves(rank, file, color)
+        
+        if "king" in piece_name:
+            return self.getKingMoves(rank, file, color)
 
         return 0
 
@@ -247,12 +285,39 @@ class GameState:
         else:
             moves = [1, 2] if rank == 2 else [1]
 
+        # Attacking - first define the square in front of us
+        ahead_mask = self.squareMask(rank + moves[0], file)
+
+        # If we arent on the first or last file our mask must be both diagnols
+        if file > 1 and file < 8:
+            diag_right = ahead_mask << 1
+            diag_left = ahead_mask >> 1
+
+        # Otherwise we only have one valid diag
+        elif file == 1:
+            diag_right = ahead_mask << 1
+            diag_left = 0
+
+        else:
+            diag_left = ahead_mask >> 1
+            diag_right = 0
+
+        # Now we create our attack mask and if it overlaops with an enemy peice we can add that to out valid pawn moves
+        attack_mask = 0 | diag_left | diag_right
+        if color == "w":
+            pawn_moves |= (attack_mask & self.black_pieces)
+
+        else:
+            pawn_moves |= (attack_mask & self.white_pieces)
+
+
+        # For stepping forawrd a rank (or two if we are on startin square)
         for rank_change in moves:
             new_rank = rank + rank_change
-
             if 1 <= new_rank <= 8:
                 move_mask = self.squareMask(new_rank, file)
-                pawn_moves |= move_mask
+                if not move_mask & self.occupied:
+                    pawn_moves |= move_mask
 
         return pawn_moves
 
@@ -272,6 +337,23 @@ class GameState:
             ROOK_DIRECTIONS,
         )
 
+    def getKingMoves(self, rank, file, color="w"):
+        king_moves = 0
+
+        # This will handle king moving to ajacent squares
+        for rank_change, file_change in QUEEN_DIRECTIONS:
+            if rank + rank_change >= 1 and rank + rank_change <= 8 and file + file_change >= 1 and file + file_change <= 8:
+                move_mask = self.squareMask(rank + rank_change, file + file_change)
+                if color == "w":
+                    if not move_mask & self.white_pieces:
+                        king_moves |= move_mask
+
+                else:
+                    if not move_mask & self.black_pieces:
+                        king_moves |= move_mask
+        return king_moves
+        # We still need to do castling
+        
     def getBishopMoves(self, rank, file, color="w"):
         if color == "w":
             friendly_pieces = self.white_pieces

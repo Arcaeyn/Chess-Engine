@@ -17,6 +17,7 @@ PADDING = SQUARESIZE // 15
 LIGHT = (232, 239, 255)
 DARK = (120, 142, 191)
 HIGHLIGHT = (80, 80, 120)
+BORDER = (80, 80, 120)
 
 font = pygame.font.Font(None, 28)
 moveSound = pygame.mixer.Sound("sounds/move-self.mp3")
@@ -55,10 +56,19 @@ PIECE_IMAGES = {
     "black_kings": loadPieceImage("black-king.png"),
 }
 
-
 def drawBoard():
     board_x = (WIDTH - BOARDSIZE) // 2
     board_y = (HEIGHT - BOARDSIZE) // 2
+    margin = (SQUARESIZE * 8)*1.015 - (SQUARESIZE * 8)
+    rect = pygame.Rect(
+                board_x - margin//2,
+                board_y - margin//2,
+                (SQUARESIZE * 8) + margin,
+                (SQUARESIZE * 8) + margin,
+            )
+
+
+    pygame.draw.rect(screen, BORDER, rect)
 
     for screen_rank in range(8):
         rank_label = font.render(
@@ -180,7 +190,8 @@ def highlightSquare(rank, file):
         screen,
         HIGHLIGHT,
         rect,
-        width=SQUARESIZE//20,
+        width = SQUARESIZE//17
+        
     )
 
 def drawPieces():
@@ -245,11 +256,13 @@ last_move = None
 
 
 while running:
+    # Handeling keyboard inputs
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
         elif event.type == pygame.KEYDOWN:
+            # Reset Board
             if event.key == pygame.K_r:
                 game_state.resetBoard()
 
@@ -258,6 +271,16 @@ while running:
                 selected_file = None
                 last_move = None
 
+            # Undo Move
+            if event.key == pygame.K_LEFT:
+
+                # We need to check if there are any moves for us to undo 
+                if last_move and len(game_state.move_history) >= 2:
+                    last_move = game_state.move_history[-2]
+                    game_state.undoMove(last_move)
+
+
+    
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button != 1:
                 continue

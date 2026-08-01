@@ -16,6 +16,17 @@ BISHOP_DIRECTIONS = [
     (-1, -1),
 ]
 
+KNIGHT_DIRECTIONS = [
+            (2, 1),
+            (2, -1),
+            (-2, 1),
+            (-2, -1),
+            (1, 2),
+            (1, -2),
+            (-1, 2),
+            (-1, -2),
+        ]
+
 QUEEN_DIRECTIONS = ROOK_DIRECTIONS + BISHOP_DIRECTIONS
 
 
@@ -109,6 +120,56 @@ class GameState:
 
     def squareMask(self, rank, file):
         return 1 << ((rank - 1) * 8 + (file - 1))
+
+    def isSquareAttacked(self, rank, file, attacking_color):
+        square_mask = self.squareMask(rank, file)
+        if attacking_color == "w":
+
+            # Check for pawn attacks
+            if ((square_mask >> 9) & self.white_pawns or (square_mask >> 7) & self.white_pawns) and rank > 1:
+                return True
+            
+            # Check for knight attacks
+            for rank_change, file_change in KNIGHT_DIRECTIONS:
+                new_rank = rank + rank_change
+                new_file = file + file_change
+
+                if (1 <= new_rank <= 8 and 1 <= new_file <= 8):
+                    knight_mask = self.squareMask(new_rank, new_file)
+                    if knight_mask and self.white_knights:
+                        return True
+                    
+            # Check for sliding attacks
+            for rank_change, file_change in QUEEN_DIRECTIONS:
+                new_rank = rank + rank_change
+                new_file = file + file_change
+                while 1 <= new_rank <= 8 and 1 <= new_file <= 8:
+                    square_mask = self.squareMask(new_rank, new_file)
+                    
+                    # Check for Bishop
+                    if square_mask and self.white_bishops:
+                        return True
+                    
+                    # Check for Queens
+                    if square_mask and self.white_queens:
+                        return True
+                    
+                    # Check for Bishop
+                    if square_mask and self.white_bishops:
+                        return True
+                    
+                    # Check for Rooks
+                    if square_mask and self.white_rooks:
+                        return True
+                    
+                    new_rank += rank_change
+                    new_file += file_change
+
+            return False
+      
+
+
+
 
     def pieceColor(self, rank, file):
         piece_mask = self.squareMask(rank, file)
@@ -204,7 +265,6 @@ class GameState:
         self.move_history.pop(-1)
         self.white_to_move = not self.white_to_move
 
-
         return True
 
     def moveIsLegal(self, move):
@@ -249,20 +309,9 @@ class GameState:
         return 0
 
     def getKnightMoves(self, rank, file, color="w"):
-        knight_directions = [
-            (2, 1),
-            (2, -1),
-            (-2, 1),
-            (-2, -1),
-            (1, 2),
-            (1, -2),
-            (-1, 2),
-            (-1, -2),
-        ]
-
         knight_moves = 0
 
-        for rank_change, file_change in knight_directions:
+        for rank_change, file_change in KNIGHT_DIRECTIONS:
             new_rank = rank + rank_change
             new_file = file + file_change
 

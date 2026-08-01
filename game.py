@@ -1,272 +1,362 @@
 import pygame
-from board import Board
+
+from board import GameState, Move
+
 
 pygame.init()
+pygame.mixer.init()
 
 
 WIDTH = 900
 HEIGHT = 800
 
 BOARDSIZE = 700
-SQUARESIZE = BOARDSIZE//8
-PADDING = SQUARESIZE//15
+SQUARESIZE = BOARDSIZE // 8
+PADDING = SQUARESIZE // 15
 
 LIGHT = (232, 239, 255)
 DARK = (120, 142, 191)
-HIGHLIGHT = (120, 120, 140)
+HIGHLIGHT = (80, 80, 120)
 
-whiteToMove = True
 font = pygame.font.Font(None, 28)
-peices = Board()
+moveSound = pygame.mixer.Sound("sounds/move-self.mp3")
+game_state = GameState()
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Engine")
 
 
-# Loading our assets, the board is drawn by the program so we just need to worry about piece images
-def load_piece_image(filename):
+def loadPieceImage(filename):
     image = pygame.image.load(
         f"pieces-basic-png/{filename}"
     ).convert_alpha()
 
-    piece_size = SQUARESIZE - (PADDING * 2)
+    piece_size = SQUARESIZE - PADDING * 2
 
     return pygame.transform.smoothscale(
         image,
-        (piece_size, piece_size)
+        (piece_size, piece_size),
     )
 
-PIECE_IMAGES = {
-    "white_pawns": load_piece_image("white-pawn.png"),
-    "white_rooks": load_piece_image("white-rook.png"),
-    "white_knights": load_piece_image("white-knight.png"),
-    "white_bishops": load_piece_image("white-bishop.png"),
-    "white_queens": load_piece_image("white-queen.png"),
-    "white_kings": load_piece_image("white-king.png"),
 
-    "black_pawns": load_piece_image("black-pawn.png"),
-    "black_rooks": load_piece_image("black-rook.png"),
-    "black_knights": load_piece_image("black-knight.png"),
-    "black_bishops": load_piece_image("black-bishop.png"),
-    "black_queens": load_piece_image("black-queen.png"),
-    "black_kings": load_piece_image("black-king.png"),
+PIECE_IMAGES = {
+    "white_pawns": loadPieceImage("white-pawn.png"),
+    "white_rooks": loadPieceImage("white-rook.png"),
+    "white_knights": loadPieceImage("white-knight.png"),
+    "white_bishops": loadPieceImage("white-bishop.png"),
+    "white_queens": loadPieceImage("white-queen.png"),
+    "white_kings": loadPieceImage("white-king.png"),
+
+    "black_pawns": loadPieceImage("black-pawn.png"),
+    "black_rooks": loadPieceImage("black-rook.png"),
+    "black_knights": loadPieceImage("black-knight.png"),
+    "black_bishops": loadPieceImage("black-bishop.png"),
+    "black_queens": loadPieceImage("black-queen.png"),
+    "black_kings": loadPieceImage("black-king.png"),
 }
 
 
-# Useful Functions For Drawing Our Board
 def drawBoard():
-    for file in range(8):
-        labelnums = font.render(str(8 - file), True, DARK if file%2 == 0  else LIGHT)
-        labelletters = font.render("abcdefgh"[file], True, LIGHT if file%2 == 0  else DARK)
-        
-        for rank in range(8):
-            color = LIGHT if (rank + file)%2 == 0 else DARK
-            
-
-            rect = pygame.Rect(
-                file * SQUARESIZE + (WIDTH - BOARDSIZE)//2,
-                rank * SQUARESIZE + (HEIGHT - BOARDSIZE)//2,
-                SQUARESIZE,
-                SQUARESIZE
-            )
-
-            pygame.draw.rect(screen, color, rect)
-        screen.blit(labelnums, ((WIDTH - BOARDSIZE)//2 + PADDING,  file * SQUARESIZE + (HEIGHT - BOARDSIZE)//2 + PADDING))
-        screen.blit(labelletters, ((WIDTH - BOARDSIZE)//2 - PADDING * 3 + (file + 1) * SQUARESIZE,  (HEIGHT - BOARDSIZE)//2 + BOARDSIZE - PADDING * 5))
-
-def create_circle_surface(radius, color):
-    # 1 & 2: Create a square canvas with per-pixel alpha (transparency)
-    diameter = radius * 2
-    circle_surface = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
-    
-    # 3: Draw a filled circle in the exact center of this new surface
-    pygame.draw.circle(circle_surface, color, (radius, radius), radius)
-    
-    return circle_surface
-
-def highlightBitBoard(bitboard):
     board_x = (WIDTH - BOARDSIZE) // 2
     board_y = (HEIGHT - BOARDSIZE) // 2
 
-    # Transparent yellow highlight
-    highlight = create_circle_surface(SQUARESIZE//6, (80, 80, 80))
+    for screen_rank in range(8):
+        rank_label = font.render(
+            str(8 - screen_rank),
+            True,
+            DARK if screen_rank % 2 == 0 else LIGHT,
+        )
+
+        for screen_file in range(8):
+            color = (
+                LIGHT
+                if (screen_rank + screen_file) % 2 == 0
+                else DARK
+            )
+
+            rect = pygame.Rect(
+                board_x + screen_file * SQUARESIZE,
+                board_y + screen_rank * SQUARESIZE,
+                SQUARESIZE,
+                SQUARESIZE,
+            )
+
+            pygame.draw.rect(screen, color, rect)
+
+        screen.blit(
+            rank_label,
+            (
+                board_x + PADDING,
+                board_y + screen_rank * SQUARESIZE + PADDING,
+            ),
+        )
+
+    for screen_file in range(8):
+        file_label = font.render(
+            "abcdefgh"[screen_file],
+            True,
+            LIGHT if screen_file % 2 == 0 else DARK,
+        )
+
+        screen.blit(
+            file_label,
+            (
+                board_x
+                + screen_file * SQUARESIZE
+                + SQUARESIZE
+                - PADDING * 3,
+                board_y + BOARDSIZE - PADDING * 5,
+            ),
+        )
+
+def createCircleSurface(radius, color):
+    diameter = radius * 2
+
+    circle_surface = pygame.Surface(
+        (diameter, diameter),
+        pygame.SRCALPHA,
+    )
+
+    pygame.draw.circle(
+        circle_surface,
+        color,
+        (radius, radius),
+        radius,
+    )
+
+    return circle_surface
+
+def highlightBitboard(bitboard):
+    board_x = (WIDTH - BOARDSIZE) // 2
+    board_y = (HEIGHT - BOARDSIZE) // 2
+
+    highlight = createCircleSurface(
+        SQUARESIZE // 6,
+        (80, 80, 80),
+    )
 
     while bitboard:
-        # Find the lowest occupied bit
         square = (bitboard & -bitboard).bit_length() - 1
 
-        file = square % 8
+        screen_file = square % 8
         chess_rank = square // 8
         screen_rank = 7 - chess_rank
 
-        x = board_x + file * SQUARESIZE + SQUARESIZE//3
-        y = board_y + screen_rank * SQUARESIZE + SQUARESIZE//3
+        x = (
+            board_x
+            + screen_file * SQUARESIZE
+            + SQUARESIZE // 3
+        )
 
-        screen.blit(highlight, (x, y), special_flags=pygame.BLEND_RGB_SUB)
+        y = (
+            board_y
+            + screen_rank * SQUARESIZE
+            + SQUARESIZE // 3
+        )
 
-        # Remove the bit we just highlighted
+        screen.blit(
+            highlight,
+            (x, y),
+            special_flags=pygame.BLEND_RGB_SUB,
+        )
+
         bitboard &= bitboard - 1
 
-def highlightSquare(file, rank):
+def highlightSquare(rank, file):
+    board_x = (WIDTH - BOARDSIZE) // 2
+    board_y = (HEIGHT - BOARDSIZE) // 2
+
+    screen_file = file - 1
+    screen_rank = 8 - rank
 
     rect = pygame.Rect(
-                    (rank - 1) * SQUARESIZE + (WIDTH - BOARDSIZE)//2,
-                    (8 - file) * SQUARESIZE + (HEIGHT - BOARDSIZE)//2,
-                    SQUARESIZE,
-                    SQUARESIZE
-                )
-    pygame.draw.rect(screen, (200, 100, 100), rect)
+        board_x + screen_file * SQUARESIZE,
+        board_y + screen_rank * SQUARESIZE,
+        SQUARESIZE,
+        SQUARESIZE,
+    )
+
+    pygame.draw.rect(
+        screen,
+        HIGHLIGHT,
+        rect,
+        width=SQUARESIZE//20,
+    )
 
 def drawPieces():
     board_x = (WIDTH - BOARDSIZE) // 2
     board_y = (HEIGHT - BOARDSIZE) // 2
 
     for bitboard_name, image in PIECE_IMAGES.items():
-        bitboard = getattr(peices, bitboard_name)
+        bitboard = getattr(game_state, bitboard_name)
 
         while bitboard:
-            # Isolate the lowest occupied bit
             piece_bit = bitboard & -bitboard
-
-            # Convert that bit to a square from 0 to 63
             square = piece_bit.bit_length() - 1
 
-            # Convert bitboard square to file and rank
-            file = square % 8
+            screen_file = square % 8
             chess_rank = square // 8
-
-            # Pygame starts at the top, so flip the rank
             screen_rank = 7 - chess_rank
 
-            x = board_x + file * SQUARESIZE + PADDING
-            y = board_y + screen_rank * SQUARESIZE + PADDING
+            x = (
+                board_x
+                + screen_file * SQUARESIZE
+                + PADDING
+            )
+
+            y = (
+                board_y
+                + screen_rank * SQUARESIZE
+                + PADDING
+            )
 
             screen.blit(image, (x, y))
 
-            # Remove the piece we just drew
             bitboard &= bitboard - 1
 
-# Converts a mouse position to a file and rank on the chess board
-def mouseToSquare(mousex, mousey):
-    boardx = (WIDTH-BOARDSIZE)//2
-    boardy = (HEIGHT - BOARDSIZE)//2
+def mouseToSquare(mouse_x, mouse_y):
+    board_x = (WIDTH - BOARDSIZE) // 2
+    board_y = (HEIGHT - BOARDSIZE) // 2
 
-    relx = boardx - mousex
-    rely = boardy - mousey
+    relative_x = mouse_x - board_x
+    relative_y = mouse_y - board_y
 
-    rank = 9 - rely//SQUARESIZE * - 1
-    file = relx//SQUARESIZE * -1
+    if not (0 <= relative_x < BOARDSIZE):
+        return None
 
-    if rank > 0 and rank < 9 and file > 0 and file < 9:
-        return (rank, file)
+    if not (0 <= relative_y < BOARDSIZE):
+        return None
 
-    return False
-    
+    file = relative_x // SQUARESIZE + 1
+    rank = 8 - relative_y // SQUARESIZE
 
-# Game Loop and Such
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Chess Engine")
+    return rank, file
+
 
 clock = pygame.time.Clock()
 
-# Variables to handle click/drag/game loop
 running = True
-placed = False
 selected = False
 
-drawPieces()
-while running:
-    # Handle events
-    for event in pygame.event.get():
+selected_rank = None
+selected_file = None
 
-        # Window Logic
+last_move = None
+
+
+while running:
+    for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        if event.type == pygame.KEYDOWN:
-            peices.resetBoard()
 
-        # When a mouse button is first pressed
-        if event.type == pygame.MOUSEBUTTONDOWN:
-
-            # We need to know whether we already have a square curr selected
-            # If it is the same square than we need to deselected
-            if selected:
-                dest_x, dest_y = event.pos
-                destRank, destFile = mouseToSquare(dest_x, dest_y)
-
-                # If its a differnet square than we move to a diff square
-                if destRank != selRank or destFile != selFile:
-                    placed = True
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r:
+                game_state.resetBoard()
 
                 selected = False
+                selected_rank = None
+                selected_file = None
+                last_move = None
 
-            # If nothing is selceted select the curr square
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button != 1:
+                continue
+
+            clicked_square = mouseToSquare(*event.pos)
+
+            if clicked_square is None:
+                selected = False
+                continue
+
+            clicked_rank, clicked_file = clicked_square
+
+            # Nothing is currently selected.
+            if not selected:
+                expected_color = (
+                    "w"
+                    if game_state.white_to_move
+                    else "b"
+                )
+
+                clicked_color = game_state.pieceColor(
+                    clicked_rank,
+                    clicked_file,
+                )
+
+                if clicked_color == expected_color:
+                    selected_rank = clicked_rank
+                    selected_file = clicked_file
+                    selected = True
+
+            # A piece is already selected, so create a Move.
             else:
-                sel_x, sel_y = event.pos
-                selRank, selFile = mouseToSquare(sel_x, sel_y)
-                selected = True
+                move = Move(
+                    start_rank=selected_rank,
+                    start_file=selected_file,
+                    end_rank=clicked_rank,
+                    end_file=clicked_file,
+                )
 
-        # When a mouse button is released
-        if event.type == pygame.MOUSEBUTTONUP and selected:
-            dest_x, dest_y = event.pos
-            destRank, destFile = mouseToSquare(dest_x, dest_y)
+                # Clicking the selected square deselects it.
+                if (
+                    move.start_rank == move.end_rank
+                    and move.start_file == move.end_file
+                ):
+                    selected = False
+                    continue
 
-            # we dont want to release on the same square we selected and have some odd shit happen
-            # This gives us drag and drop functinoality
-            # TODO: if the selected piece has been selected usign a mousedown and the mouse has not detcted a mouse up
-            # But its position has changed to a diff square than we know that the user is trying to drag and drop the piece
-            # This means we can temproarily snap the piece image to the mouse until we detectd a mouse up that lands on a diff square
-            if selRank != destRank or selFile != destFile:
-                placed = True
+                if game_state.moveIsLegal(move):
+                    game_state.movePiece(move)
+                    moveSound.play()
+                    last_move = move
+
                 selected = False
 
-    mouse_x, mouse_y = pygame.mouse.get_pos()
-
-    # Draw everything
     screen.fill((30, 30, 40))
     drawBoard()
 
-    # Logic to Handle Moving Pieces
-    # This just highlights the selected Piece, it unhilights once a turn changes maybe I need to fix this
+    if last_move is not None:
+        highlightSquare(
+            last_move.start_rank,
+            last_move.start_file,
+        )
+
+        highlightSquare(
+            last_move.end_rank,
+            last_move.end_file,
+        )
+
     if selected:
-        highlightBitBoard(peices.getPseduoLegalMoves(selRank, selFile))
-        highlightSquare(selRank, selFile)
+        pseudo_legal_moves = game_state.getPseudoLegalMoves(
+            selected_rank,
+            selected_file,
+        )
 
-    # Check if a move is legal before allowing it
-    legalMove = False
-    if placed:
-        legalMove = peices.moveIsLegal(selRank, selFile, destRank, destFile)
+        highlightBitboard(pseudo_legal_moves)
 
-    # This will handle moving/placing a white piece
-    if placed and whiteToMove and peices.pieceColor(selRank, selFile) == "w" and legalMove:
-        placed = False
-        selected = False
-        whiteToMove = False
-        peices.movePiece(selRank, selFile, destRank, destFile)
-        highlightSquare(selRank, selFile)
-        highlightSquare(destRank, destFile)
+        highlightSquare(
+            selected_rank,
+            selected_file,
+        )
 
-    # And this handles black pieces being moved
-    elif placed and not whiteToMove and peices.pieceColor(selRank, selFile) == "b" and legalMove:
-        placed = False
-        selected = False
-        whiteToMove = True
-        peices.movePiece(selRank, selFile, destRank, destFile)
-        highlightSquare(selRank, selFile)
-        highlightSquare(destRank, destFile)
-
-    # Otherwise nothing has been placed
-    else:
-        placed = False
-
-    # Now that all highlighting and legal moves are drawn we can draw pieces and display
     drawPieces()
-    # Show what was drawn
-    pygame.display.flip()
 
-    # Limit the program to 60 frames per second
+    turn_text = (
+        "White to move"
+        if game_state.white_to_move
+        else "Black to move"
+    )
+
+    turn_label = font.render(
+        turn_text,
+        True,
+        (255, 255, 255),
+    )
+
+    screen.blit(turn_label, (20, 20))
+
+    pygame.display.flip()
     clock.tick(60)
 
+
 pygame.quit()
-
-

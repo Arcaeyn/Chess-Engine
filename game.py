@@ -275,8 +275,8 @@ while running:
             if event.key == pygame.K_LEFT:
 
                 # We need to check if there are any moves for us to undo 
-                if last_move and len(game_state.move_history) >= 2:
-                    last_move = game_state.move_history[-2]
+                if last_move and len(game_state.move_history) >= 1:
+                    last_move = game_state.move_history[-1]
                     game_state.undoMove(last_move)
 
 
@@ -350,7 +350,7 @@ while running:
         )
 
     if selected:
-        pseudo_legal_moves = game_state.getPseudoLegalMoves(
+        pseudo_legal_moves = game_state.getLegalMoves(
             selected_rank,
             selected_file,
         )

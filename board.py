@@ -328,7 +328,7 @@ class GameState:
         return True
 
     def moveIsLegal(self, move):
-        legal_moves = self.getPseudoLegalMoves(
+        legal_moves = self.getLegalMoves(
             move.start_rank,
             move.start_file,
         )
@@ -350,22 +350,22 @@ class GameState:
         color = piece_name[0]
 
         if "bishop" in piece_name:
-            return self.getBishopMoves(rank, file, color)
+            return self.getBishopMoves(rank, file)
 
         if "knight" in piece_name:
-            return self.getKnightMoves(rank, file, color)
+            return self.getKnightMoves(rank, file)
 
         if "rook" in piece_name:
-            return self.getRookMoves(rank, file, color)
+            return self.getRookMoves(rank, file)
 
         if "queen" in piece_name:
-            return self.getQueenMoves(rank, file, color)
+            return self.getQueenMoves(rank, file)
 
         if "pawn" in piece_name:
-            return self.getPawnMoves(rank, file, color)
+            return self.getPawnMoves(rank, file)
         
         if "king" in piece_name:
-            return self.getKingMoves(rank, file, color)
+            return self.getKingMoves(rank, file)
 
         return 0
 

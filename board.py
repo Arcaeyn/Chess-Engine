@@ -221,10 +221,12 @@ class GameState:
       
     def kingInCheck(self, king_color):
         if king_color == "b":
-            if self.isSquareAttacked(self.bitboardToSquare(self.black_kings), "w"):
+            rank, file = self.bitboardToSquare(self.black_kings)
+            if self.isSquareAttacked(rank, file, "w"):
                 return True
         else:
-            if self.isSquareAttacked(self.bitboardToSquare(self.white_kings), "b"):
+            rank, file = self.bitboardToSquare(self.white_kings)
+            if self.isSquareAttacked(rank, file, "b"):
                 return True
 
         return False
@@ -338,6 +340,7 @@ class GameState:
 
         return bool(legal_moves & destination_mask)
 
+    # Functions needed to highlight moves
     def getPseudoLegalMoves(self, rank, file):
         piece_name = self.getPiece(rank, file)
 
@@ -366,7 +369,34 @@ class GameState:
 
         return 0
 
-    def getKnightMoves(self, rank, file, color="w"):
+    def getLegalMoves(self, rank, file):
+        legal = 0
+
+        pseudo = self.getPseudoLegalMoves(rank, file)
+
+        while pseudo:
+            dest = pseudo & -pseudo
+
+            end_rank, end_file = self.bitboardToSquare(dest)
+
+            move = Move(rank, file, end_rank, end_file)
+
+            moving_color = self.pieceColor(rank, file)
+
+            self.movePiece(move)
+
+            if not self.kingInCheck(moving_color):
+                legal |= dest
+
+            self.undoMove(move)
+
+            pseudo ^= dest
+
+        return legal
+    
+    # These set of functions allow us to get the legal moves for a peice on a square
+    def getKnightMoves(self, rank, file):
+        color = self.pieceColor(rank, file)
         knight_moves = 0
 
         for rank_change, file_change in KNIGHT_DIRECTIONS:
@@ -384,8 +414,9 @@ class GameState:
 
         return knight_moves
 
-    def getPawnMoves(self, rank, file, color="w"):
+    def getPawnMoves(self, rank, file):
         pawn_moves = 0
+        color = self.pieceColor(rank, file)
 
         if color == "b":
             moves = [-1, -2] if rank == 7 else [-1]
@@ -428,7 +459,8 @@ class GameState:
 
         return pawn_moves
 
-    def getRookMoves(self, rank, file, color="w"):
+    def getRookMoves(self, rank, file):
+        color = self.pieceColor(rank, file)
         if color == "w":
             friendly_pieces = self.white_pieces
             enemy_pieces = self.black_pieces
@@ -444,7 +476,8 @@ class GameState:
             ROOK_DIRECTIONS,
         )
 
-    def getKingMoves(self, rank, file, color="w"):
+    def getKingMoves(self, rank, file):
+        color = self.pieceColor(rank, file)
         king_moves = 0
 
         # This will handle king moving to ajacent squares
@@ -461,7 +494,8 @@ class GameState:
         return king_moves
         # We still need to do castling
         
-    def getBishopMoves(self, rank, file, color="w"):
+    def getBishopMoves(self, rank, file):
+        color = self.pieceColor(rank, file)
         if color == "w":
             friendly_pieces = self.white_pieces
             enemy_pieces = self.black_pieces
@@ -477,7 +511,8 @@ class GameState:
             BISHOP_DIRECTIONS,
         )
 
-    def getQueenMoves(self, rank, file, color="w"):
+    def getQueenMoves(self, rank, file):
+        color = self.pieceColor(rank, file)
         if color == "w":
             friendly_pieces = self.white_pieces
             enemy_pieces = self.black_pieces
@@ -493,6 +528,7 @@ class GameState:
             QUEEN_DIRECTIONS,
         )
 
+    # This helper function allows us to easily find the legal moves for the sliding pieces (althouhg magic bitboards would be faster)
     def slidingMoves(
         self,
         rank,
@@ -525,3 +561,67 @@ class GameState:
                 new_file += file_change
 
         return moves
+    
+    # Generate moves in order to find all possible legal moves we ened to use the bitboards given by the getMove functions
+    # and convert them into a list of moves for every piece in a bitboard
+    def generateMovesFromBitboard(self, bitboard, move_generator):
+        moves = []
+
+        while bitboard:
+            piece = bitboard & -bitboard
+
+            start_rank, start_file = self.bitboardToSquare(piece)
+            destinations = move_generator(start_rank, start_file)
+
+            while destinations:
+                dest = destinations & -destinations
+                end_rank, end_file = self.bitboardToSquare(dest)
+
+                moves.append(
+                    Move(
+                        start_rank,
+                        start_file,
+                        end_rank,
+                        end_file,
+                    )
+                )
+
+                destinations ^= dest
+
+            bitboard ^= piece
+
+        return moves
+
+    def generatePseudoMoves(self):
+        if self.white_to_move:
+            return (
+                self.generateMovesFromBitboard(self.white_pawns, self.getPawnMoves)
+                + self.generateMovesFromBitboard(self.white_knights, self.getKnightMoves)
+                + self.generateMovesFromBitboard(self.white_bishops, self.getBishopMoves)
+                + self.generateMovesFromBitboard(self.white_rooks, self.getRookMoves)
+                + self.generateMovesFromBitboard(self.white_queens, self.getQueenMoves)
+                + self.generateMovesFromBitboard(self.white_kings, self.getKingMoves)
+            )
+        else:
+            return (
+                self.generateMovesFromBitboard(self.black_pawns, self.getPawnMoves)
+                + self.generateMovesFromBitboard(self.black_knights, self.getKnightMoves)
+                + self.generateMovesFromBitboard(self.black_bishops, self.getBishopMoves)
+                + self.generateMovesFromBitboard(self.black_rooks, self.getRookMoves)
+                + self.generateMovesFromBitboard(self.black_queens, self.getQueenMoves)
+                + self.generateMovesFromBitboard(self.black_kings, self.getKingMoves)
+            )
+        
+    def generateMoves(self):
+        moves = []
+        color = "w" if self.white_to_move else "b"
+
+        for move in self.generatePseudoMoves():
+            self.movePiece(move)
+            if not self.kingInCheck(color):
+                moves.append(move)
+
+            self.undoMove(move)
+
+        return moves
+

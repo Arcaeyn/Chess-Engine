@@ -1,7 +1,8 @@
 import pygame
+import time
 
 from board import GameState, Move
-
+from bot import Bot
 
 pygame.init()
 pygame.mixer.init()
@@ -22,6 +23,7 @@ BORDER = (80, 80, 120)
 font = pygame.font.Font(None, 28)
 moveSound = pygame.mixer.Sound("sounds/move-self.mp3")
 game_state = GameState()
+bot = Bot(game_state)
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Engine")
@@ -194,6 +196,10 @@ def highlightSquare(rank, file):
         
     )
 
+def drawText(text, x, y, color=(255, 255, 255)):
+    surface = font.render(str(text), True, color)
+    screen.blit(surface, (x, y))
+
 def drawPieces():
     board_x = (WIDTH - BOARDSIZE) // 2
     board_y = (HEIGHT - BOARDSIZE) // 2
@@ -253,9 +259,17 @@ selected_rank = None
 selected_file = None
 
 last_move = None
+start = 0
+end = 0
 
 
 while running:
+    if not game_state.white_to_move:
+        start = time.time()
+        game_state.movePiece(bot.findBestMove(1))
+        end = time.time()
+
+
     # Handeling keyboard inputs
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -295,11 +309,7 @@ while running:
 
             # Nothing is currently selected.
             if not selected:
-                expected_color = (
-                    "w"
-                    if game_state.white_to_move
-                    else "b"
-                )
+                expected_color = "w"
 
                 clicked_color = game_state.pieceColor(
                     clicked_rank,
@@ -377,6 +387,8 @@ while running:
     )
 
     screen.blit(turn_label, (20, 20))
+    
+    drawText("Thought for " + str(round((end - start), 2)) + " seconds.", 200, 10)
 
     pygame.display.flip()
     clock.tick(60)

@@ -423,30 +423,31 @@ class GameState:
         else:
             moves = [1, 2] if rank == 2 else [1]
 
-        # Attacking - first define the square in front of us
-        ahead_mask = self.squareMask(rank + moves[0], file)
+        if rank > 1 and rank < 8:
+                # Attacking - first define the square in front of us
+            ahead_mask = self.squareMask(rank + moves[0], file)
 
-        # If we arent on the first or last file our mask must be both diagnols
-        if file > 1 and file < 8:
-            diag_right = ahead_mask << 1
-            diag_left = ahead_mask >> 1
+            # If we arent on the first or last file our mask must be both diagnols
+            if file > 1 and file < 8:
+                diag_right = ahead_mask << 1
+                diag_left = ahead_mask >> 1
 
-        # Otherwise we only have one valid diag
-        elif file == 1:
-            diag_right = ahead_mask << 1
-            diag_left = 0
+            # Otherwise we only have one valid diag
+            elif file == 1:
+                diag_right = ahead_mask << 1
+                diag_left = 0
 
-        else:
-            diag_left = ahead_mask >> 1
-            diag_right = 0
+            else:
+                diag_left = ahead_mask >> 1
+                diag_right = 0
 
-        # Now we create our attack mask and if it overlaops with an enemy peice we can add that to out valid pawn moves
-        attack_mask = 0 | diag_left | diag_right
-        if color == "w":
-            pawn_moves |= (attack_mask & self.black_pieces)
+            # Now we create our attack mask and if it overlaops with an enemy peice we can add that to out valid pawn moves
+            attack_mask = 0 | diag_left | diag_right
+            if color == "w":
+                pawn_moves |= (attack_mask & self.black_pieces)
 
-        else:
-            pawn_moves |= (attack_mask & self.white_pieces)
+            else:
+                pawn_moves |= (attack_mask & self.white_pieces)
 
 
         # For stepping forawrd a rank (or two if we are on startin square)

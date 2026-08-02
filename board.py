@@ -121,55 +121,113 @@ class GameState:
     def squareMask(self, rank, file):
         return 1 << ((rank - 1) * 8 + (file - 1))
 
+    def bitboardToSquare(self, bitboard):
+        if bitboard == 0 or bitboard & (bitboard - 1):
+            raise ValueError("Bitboard must contain exactly one set bit")
+
+        index = bitboard.bit_length() - 1
+
+        rank = (index // 8) + 1
+        file = (index % 8) + 1
+
+        return rank, file
+
     def isSquareAttacked(self, rank, file, attacking_color):
         square_mask = self.squareMask(rank, file)
+
+        # Select the attacking pieces once
         if attacking_color == "w":
+            pawns = self.white_pawns
+            knights = self.white_knights
+            bishops = self.white_bishops
+            rooks = self.white_rooks
+            queens = self.white_queens
+            kings = self.white_kings
 
-            # Check for pawn attacks
-            if ((square_mask >> 9) & self.white_pawns or (square_mask >> 7) & self.white_pawns) and rank > 1:
-                return True
-            
-            # Check for knight attacks
-            for rank_change, file_change in KNIGHT_DIRECTIONS:
-                new_rank = rank + rank_change
-                new_file = file + file_change
+        else:
+            pawns = self.black_pawns
+            knights = self.black_knights
+            bishops = self.black_bishops
+            rooks = self.black_rooks
+            queens = self.black_queens
+            kings = self.black_kings
 
-                if (1 <= new_rank <= 8 and 1 <= new_file <= 8):
-                    knight_mask = self.squareMask(new_rank, new_file)
-                    if knight_mask and self.white_knights:
-                        return True
-                    
-            # Check for sliding attacks
-            for rank_change, file_change in QUEEN_DIRECTIONS:
-                new_rank = rank + rank_change
-                new_file = file + file_change
-                while 1 <= new_rank <= 8 and 1 <= new_file <= 8:
-                    square_mask = self.squareMask(new_rank, new_file)
-                    
-                    # Check for Bishop
-                    if square_mask and self.white_bishops:
-                        return True
-                    
-                    # Check for Queens
-                    if square_mask and self.white_queens:
-                        return True
-                    
-                    # Check for Bishop
-                    if square_mask and self.white_bishops:
-                        return True
-                    
-                    # Check for Rooks
-                    if square_mask and self.white_rooks:
-                        return True
-                    
-                    new_rank += rank_change
-                    new_file += file_change
 
-            return False
+        # Check for pawn attacks
+        if attacking_color == "w":
+            if rank > 1:
+                if file > 1 and (square_mask >> 9) & pawns:
+                    return True
+
+                if file < 8 and (square_mask >> 7) & pawns:
+                    return True
+
+        else:
+            if rank < 8:
+                if file < 8 and (square_mask << 9) & pawns:
+                    return True
+
+                if file > 1 and (square_mask << 7) & pawns:
+                    return True
+        
+        # Check for knight attacks
+        for rank_change, file_change in KNIGHT_DIRECTIONS:
+            new_rank = rank + rank_change
+            new_file = file + file_change
+
+            if (1 <= new_rank <= 8 and 1 <= new_file <= 8):
+                knight_mask = self.squareMask(new_rank, new_file)
+                if knight_mask & knights:
+                    return True
+                
+        # Check for sliding attacks
+        for rank_change, file_change in QUEEN_DIRECTIONS:
+            new_rank = rank + rank_change
+            new_file = file + file_change
+            while 1 <= new_rank <= 8 and 1 <= new_file <= 8:
+                mask = self.squareMask(new_rank, new_file)
+                
+                is_diagonal = rank_change != 0 and file_change != 0
+
+                # Check for all sliding peices
+                if is_diagonal:
+                    if mask & (bishops | queens): # for diaganol pieces (the bishop and queen)
+                        return True
+
+                else:
+                    if mask & (rooks | queens): # for rooks and queens
+                        return True
+
+                # stop searching if any piece is in the way   
+                if mask & self.occupied:
+                    break
+
+                new_rank += rank_change
+                new_file += file_change
+
+        # King attacks
+        for rank_change, file_change in QUEEN_DIRECTIONS:
+            new_rank = rank + rank_change
+            new_file = file + file_change
+
+            if 1 <= new_rank <= 8 and 1 <= new_file <= 8:
+                king_mask = self.squareMask(new_rank, new_file)
+
+                if king_mask & kings:
+                    return True
+
+
+        return False
       
+    def kingInCheck(self, king_color):
+        if king_color == "b":
+            if self.isSquareAttacked(self.bitboardToSquare(self.black_kings), "w"):
+                return True
+        else:
+            if self.isSquareAttacked(self.bitboardToSquare(self.white_kings), "b"):
+                return True
 
-
-
+        return False
 
     def pieceColor(self, rank, file):
         piece_mask = self.squareMask(rank, file)

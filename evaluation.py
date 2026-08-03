@@ -129,7 +129,6 @@ class Evaluator:
         score = 0
 
         score += self.material(game)
-        score += self.piece_square(game)
 
         return score
 

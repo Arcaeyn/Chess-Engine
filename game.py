@@ -200,6 +200,10 @@ def drawText(text, x, y, color=(255, 255, 255)):
     surface = font.render(str(text), True, color)
     screen.blit(surface, (x, y))
 
+def drawText(text, x, y, color=(255, 255, 255)):
+    surface = font.render(str(text), True, color)
+    screen.blit(surface, (x, y))
+
 def drawPieces():
     board_x = (WIDTH - BOARDSIZE) // 2
     board_y = (HEIGHT - BOARDSIZE) // 2
@@ -249,6 +253,39 @@ def mouseToSquare(mouse_x, mouse_y):
 
     return rank, file
 
+def evalBar(eval):
+    board_x = (WIDTH - BOARDSIZE) // 2
+    board_y = (HEIGHT - BOARDSIZE) // 2
+
+    padding = SQUARESIZE//3
+    border_radius = SQUARESIZE //20
+    width = SQUARESIZE//6
+
+    border = pygame.Rect(
+        board_x - padding - border_radius,
+        board_y - border_radius,
+        width + border_radius * 2,
+        SQUARESIZE * 8 + border_radius * 2,
+    )
+
+    back = pygame.Rect(
+        board_x - padding,
+        board_y,
+        width,
+        SQUARESIZE * 8,
+    )
+    rect = pygame.Rect(
+        board_x - padding,
+        board_y,
+        width,
+        min(SQUARESIZE * 4 + (-1 * eval) * 0.6, SQUARESIZE * 8)
+    )
+
+    pygame.draw.rect(screen, HIGHLIGHT, border)
+    pygame.draw.rect(screen, LIGHT, back)
+    pygame.draw.rect(screen, DARK, rect)
+    sign = "+" if eval > 0 else ""
+    drawText(sign + str(eval/100), board_x - padding - border_radius * 4, board_y + BOARDSIZE + border_radius)
 
 clock = pygame.time.Clock()
 
@@ -264,10 +301,17 @@ end = 0
 
 
 while running:
+
     if not game_state.white_to_move:
         start = time.time()
-        game_state.movePiece(bot.playBestMove2(4))
+        move = bot.findBestMove(2)
+        game_state.movePiece(move)
+        moveSound.play()
+        best = bot.eval
         end = time.time()
+
+    else:
+        best = bot.eval
 
 
     # Handeling keyboard inputs
@@ -309,7 +353,7 @@ while running:
 
             # Nothing is currently selected.
             if not selected:
-                expected_color = "w"
+                expected_color = "w" if game_state.white_to_move else "b"
 
                 clicked_color = game_state.pieceColor(
                     clicked_rank,
@@ -387,9 +431,9 @@ while running:
     drawPieces()
 
     turn_text = (
-        "White to move"
+        "White"
         if game_state.white_to_move
-        else "Black to move"
+        else "Black"
     )
 
     turn_label = font.render(
@@ -398,9 +442,10 @@ while running:
         (255, 255, 255),
     )
 
-    screen.blit(turn_label, (20, 20))
+    screen.blit(turn_label, (100, 20))
     
-    drawText("Thought for " + str(round((end - start), 2)) + " seconds.", 200, 10)
+    drawText("Depth: " + str(5) + "  Time: "  + str(round((end - start), 2)) + "s", 610, 20)
+    evalBar(best)
 
     pygame.display.flip()
     clock.tick(60)

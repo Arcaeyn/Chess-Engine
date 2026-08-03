@@ -266,7 +266,7 @@ end = 0
 while running:
     if not game_state.white_to_move:
         start = time.time()
-        game_state.movePiece(bot.findBestMove(1))
+        game_state.movePiece(bot.playRandom())
         end = time.time()
 
 

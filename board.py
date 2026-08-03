@@ -231,6 +231,26 @@ class GameState:
 
         return False
 
+    def isCheckmate(self):
+        numMoves = len(self.generateMoves())
+        if self.white_to_move and numMoves == 0:
+            if self.kingInCheck("w"):
+                return True
+            
+        if not self.white_to_move and numMoves == 0:
+            if self.kingInCheck("b"):
+                return True
+            
+    def isStalemate(self):
+        numMoves = len(self.generateMoves())
+        if self.white_to_move and numMoves == 0:
+            if not self.kingInCheck("w"):
+                return True
+            
+        if not self.white_to_move and numMoves == 0:
+            if not self.kingInCheck("b"):
+                return True
+
     def pieceColor(self, rank, file):
         piece_mask = self.squareMask(rank, file)
 

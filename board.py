@@ -41,7 +41,7 @@ class Move:
     is_en_passant: bool = False
 
     moved_piece: str | None = None
-    captured_peice: str | None = None
+    captured_piece: str | None = None
 
 
 class GameState:
@@ -308,8 +308,16 @@ class GameState:
         moving_bitboard = getattr(self, move.moved_piece)
         moving_bitboard &= ~selected_mask
 
-        # Place it on the destination square.
-        moving_bitboard |= destination_mask
+        # if Pawn Promotion
+        if move.promotion:
+            promotion_bitboard = getattr(self, move.promotion)
+            promotion_bitboard |= destination_mask
+            setattr(self, move.promotion, promotion_bitboard)
+
+        else:
+            # Place it on the destination square.
+            moving_bitboard |= destination_mask
+
         setattr(self, move.moved_piece, moving_bitboard)
 
         self.move_history.append(move)
@@ -334,10 +342,17 @@ class GameState:
             captured_bitboard |= destination_mask
             setattr(self, move.captured_piece, captured_bitboard)
 
-        # Remove the movied piece from the destination square and then place it back onto the selected square
+        # Remove the moved piece from the destination square and then place it back onto the selected square
         moving_bitboard = getattr(self, move.moved_piece)
         moving_bitboard &= ~destination_mask
         moving_bitboard |= selected_mask
+
+        # Handle promotions
+        if move.promotion:
+             promotion_bitboard = getattr(self, move.promotion)
+             promotion_bitboard &= ~destination_mask
+             setattr(self, move.promotion, promotion_bitboard)
+
         setattr(self, move.moved_piece, moving_bitboard)
 
         # Update state
@@ -597,15 +612,24 @@ class GameState:
             while destinations:
                 dest = destinations & -destinations
                 end_rank, end_file = self.bitboardToSquare(dest)
-
-                moves.append(
-                    Move(
-                        start_rank,
-                        start_file,
-                        end_rank,
-                        end_file,
+                
+                # Pawn Promotion
+                piece_name = self.getPiece(start_rank, start_file)
+                if (end_rank == 1 or end_rank == 8) and "pawn" in piece_name:              
+                    moves.append(Move(start_rank, start_file, end_rank, end_file, promotion=piece_name[:5] + "_queens"))
+                    moves.append(Move(start_rank, start_file, end_rank, end_file, promotion=piece_name[:5] + "_knights"))
+                    moves.append(Move(start_rank, start_file, end_rank, end_file, promotion=piece_name[:5] + "_bishops"))
+                    moves.append(Move(start_rank, start_file, end_rank, end_file, promotion=piece_name[:5] + "_rooks"))
+        
+                else:
+                    moves.append(
+                        Move(
+                            start_rank,
+                            start_file,
+                            end_rank,
+                            end_file,
+                        )
                     )
-                )
 
                 destinations ^= dest
 

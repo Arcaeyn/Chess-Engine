@@ -266,7 +266,7 @@ end = 0
 while running:
     if not game_state.white_to_move:
         start = time.time()
-        game_state.movePiece(bot.playRandom())
+        game_state.movePiece(bot.playBestMove2(4))
         end = time.time()
 
 
@@ -323,12 +323,24 @@ while running:
 
             # A piece is already selected, so create a Move.
             else:
-                move = Move(
-                    start_rank=selected_rank,
-                    start_file=selected_file,
-                    end_rank=clicked_rank,
-                    end_file=clicked_file,
+                # If a pawn is promoting we need to make it a queen
+                piece = game_state.getPiece(selected_rank, selected_file)
+                if "pawn" in piece and (clicked_rank == 8 or clicked_rank == 1):
+                    move = Move(
+                        start_rank=selected_rank,
+                        start_file=selected_file,
+                        end_rank=clicked_rank,
+                        end_file=clicked_file,
+                        promotion=piece[:5] + "_queens"
                 )
+                # Otherwise we can just make a nomral move
+                else:
+                    move = Move(
+                        start_rank=selected_rank,
+                        start_file=selected_file,
+                        end_rank=clicked_rank,
+                        end_file=clicked_file)
+
 
                 # Clicking the selected square deselects it.
                 if (

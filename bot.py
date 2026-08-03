@@ -1,5 +1,6 @@
 import random
 from board import GameState, Move
+from evaluation import Evaluator
 
 
 class Bot:
@@ -7,6 +8,7 @@ class Bot:
         self.depth = 3
         self.game = game
         self.nodes = 0
+        self.bestscore = 0
         self.piece_values = {
             "white_pawns": 100,
             "black_pawns": -100,
@@ -21,112 +23,171 @@ class Bot:
             "white_kings": 0,
             "black_kings": 0,
         }
+        self.evaluator = Evaluator()
 
     def playRandom(self):
         moves = self.game.generateMoves()
         return moves[random.randint(0, len(moves) - 1)]
     
-    
-    def search(self, depth, alpha, beta):
-        self.nodes += 1
-
+    def search(self, depth):
+        # Base case:
+        # If we've reached the desired depth, simply evaluate the position.
         if depth == 0:
-            return self.eval()
+            return self.eval()   
+
+        # Generate all legal moves from the current position.
+        moves = self.game.generateMoves()
+
+        # TODO:
+        # What happens if there are NO legal moves?
+        #
+        # This is where you'll handle:
+        # - Checkmate
+        # - Stalemate
+
+        # TODO:
+        # Decide whether we're maximizing or minimizing.
+
+        if self.game.white_to_move:
+            best = -1000000
+
+        else:
+            best = 1000000
+
+        for move in moves:
+
+            # Make the move
+            self.game.movePiece(move)
+
+            # Ask:
+            # "If my opponent now plays perfectly,
+            # how good is this position?"
+            score = self.search(depth - 1)
+
+            # Restore the board
+            self.game.undoMove(move)
+
+            if self.game.white_to_move and score > best:
+                best = score
+
+            elif not self.game.white_to_move and score < best:
+                best = score
+        return best
+    
+    def search2(self, depth, alpha=-1000000, beta=1000000):
+        # Base case
+        if depth == 0:
+            return self.eval2()
 
         moves = self.game.generateMoves()
 
-        if not moves:
-            return self.eval()
+        # TODO:
+        # Handle checkmate/stalemate here
 
+        # White maximizes
         if self.game.white_to_move:
-
-            value = -100000
-
-            for move in moves:
-                self.game.movePiece(move)
-
-                value = max(
-                    value,
-                    self.search(depth - 1, alpha, beta)
-                )
-
-                self.game.undoMove(move)
-
-                alpha = max(alpha, value)
-
-                if alpha >= beta:
-                    break
-
-            return value
-
-        else:
-
-            value = 100000
+            best = -1000000
 
             for move in moves:
                 self.game.movePiece(move)
-
-                value = min(
-                    value,
-                    self.search(depth - 1, alpha, beta)
-                )
-
+                score = self.search2(depth - 1, alpha, beta)
                 self.game.undoMove(move)
 
-                beta = min(beta, value)
+                if score > best:
+                    best = score
 
+                alpha = max(alpha, best)
+
+                # Beta cutoff
                 if beta <= alpha:
                     break
 
-            return value
+            return best
 
-    def findBestMove(self, depth):
-        moves = self.game.generateMoves()
-
-        best_move = None
-
-        alpha = -100000
-        beta = 100000
-
-        if self.game.white_to_move:
-
-            best_score = -100000
+        # Black minimizes
+        else:
+            best = 1000000
 
             for move in moves:
                 self.game.movePiece(move)
-
-                score = self.search(depth - 1, alpha, beta)
-
+                score = self.search2(depth - 1, alpha, beta)
                 self.game.undoMove(move)
 
-                if score > best_score:
-                    best_score = score
-                    best_move = move
+                if score < best:
+                    best = score
 
-                alpha = max(alpha, best_score)
+                beta = min(beta, best)
+
+                # Alpha cutoff
+                if beta <= alpha:
+                    break
+
+            return best
+
+    def playBestMove(self, depth):
+        moves = self.game.generateMoves()
+        if self.game.white_to_move:
+            best = -1000000
 
         else:
+            best = 100000
 
-            best_score = 100000
 
-            for move in moves:
-                self.game.movePiece(move)
+        best_moves = []
+        for move in moves:
+            self.game.movePiece(move)
+            score = self.search(depth - 1)
+            self.game.undoMove(move)
 
-                score = self.search(depth - 1, alpha, beta)
+            if score >= best and self.game.white_to_move:
+                best = score
+                best_moves = [move]
 
-                self.game.undoMove(move)
+            elif score <= best and not self.game.white_to_move:
+                best = score
+                best_moves = [move]
 
-                if score < best_score:
-                    best_score = score
-                    best_move = move
+            elif score == best:
+                best_moves.append(move)
 
-                beta = min(beta, best_score)
+        print("My Eval: " + str(best))
+        return best_moves[random.randint(0, len(best_moves) - 1)]
 
-        print(self.nodes)
-        self.nodes = 0
+    def playBestMove2(self, depth):
 
-        return best_move
-    
+        alpha = -1000000
+        beta = 1000000
+
+        moves = self.game.generateMoves()
+        if self.game.white_to_move:
+            best = -1000000
+
+        else:
+            best = 100000
+
+
+        best_moves = []
+        for move in moves:
+            self.game.movePiece(move)
+            score = self.search2(depth - 1, alpha, beta)
+            self.game.undoMove(move)
+
+            if score > best and self.game.white_to_move:
+                best = score
+                best_moves = [move]
+                alpha = max(alpha, best)
+
+            elif score < best and not self.game.white_to_move:
+                best = score
+                best_moves = [move]
+                beta = min(beta, best)
+
+            elif score == best:
+                best_moves.append(move)
+
+        print("Noam Eval: " + str(best))
+        return best_moves[random.randint(0, len(best_moves) - 1)]
+
     def eval(self):
         score = 0
 
@@ -147,3 +208,5 @@ class Bot:
 
         return score
 
+    def eval2(self):
+        return self.evaluator.evaluate(self.game)

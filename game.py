@@ -1,5 +1,6 @@
 import pygame
 import time
+import math
 
 from board import GameState, Move
 from bot import Bot
@@ -260,6 +261,7 @@ def evalBar(eval):
     padding = SQUARESIZE//3
     border_radius = SQUARESIZE //20
     width = SQUARESIZE//6
+    black_percent = 1 - (1.0 / (1.0 + math.exp(-eval / 200.0)))
 
     border = pygame.Rect(
         board_x - padding - border_radius,
@@ -278,14 +280,14 @@ def evalBar(eval):
         board_x - padding,
         board_y,
         width,
-        min(SQUARESIZE * 4 + (-1 * eval) * 0.6, SQUARESIZE * 8)
+        min(BOARDSIZE * black_percent, BOARDSIZE)
     )
 
     pygame.draw.rect(screen, HIGHLIGHT, border)
     pygame.draw.rect(screen, LIGHT, back)
     pygame.draw.rect(screen, DARK, rect)
     sign = "+" if eval > 0 else ""
-    drawText(sign + str(eval/100), board_x - padding - border_radius * 4, board_y + BOARDSIZE + border_radius)
+    drawText(sign + str(round(eval/100, 2)), board_x - padding - border_radius * 4, board_y + BOARDSIZE + border_radius)
 
 clock = pygame.time.Clock()
 
@@ -304,14 +306,19 @@ while running:
 
     if not game_state.white_to_move:
         start = time.time()
-        move = bot.findBestMove(3)
+        move = bot.findBestMove(4)
         game_state.movePiece(move)
         moveSound.play()
         best = bot.eval
         end = time.time()
 
-    else:
+    if  game_state.white_to_move:
+        start = time.time()
+        move = bot.findBestMove(3)
+        game_state.movePiece(move)
+        moveSound.play()
         best = bot.eval
+        end = time.time()
 
 
 

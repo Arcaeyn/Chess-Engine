@@ -8,7 +8,7 @@ class Bot:
         self.depth = 3
         self.game = game
         self.nodes = 0
-        self.evaluator = Evaluator()
+        self.evaluator = Evaluator(self.game)
         self.bestscore = 0
         self.eval = 0
         self.piece_values = {
@@ -70,7 +70,18 @@ class Bot:
 
             return best
     
-    def orderMoves(self, moves = list):
+    def orderMoves(self, moves: list[Move]) -> list[Move]:
+        scored_moves = []
+
+        for move in moves:
+            score = self.scoreMove(move)
+            scored_moves.append((score, move))
+
+        scored_moves.sort(key=lambda item: item[0], reverse=True)
+
+        return [move for score, move in scored_moves]
+
+    def orderMovesOld(self, moves = list):
         tactical = []
         quiet = []
 
@@ -85,6 +96,44 @@ class Bot:
 
         res = tactical + quiet
         return moves
+
+    def scoreMove(self, move: Move) -> int:
+        score = 0
+        color = "w" if self.game.white_to_move else "b"
+
+        moving_piece = self.game.getPiece(
+            move.start_rank,
+            move.start_file,
+        )
+
+        captured_piece = self.game.getPiece(
+            move.end_rank,
+            move.end_file,
+        )
+
+        moving_value = abs(self.piece_values[moving_piece])
+
+        # Promotion
+        if "pawn" in moving_piece and move.end_rank in (1, 8):
+            score += 800
+
+        
+        # Check
+        self.game.movePiece(move)
+        if self.game.kingInCheck(color):
+            score += 500
+        self.game.undoMove(move)
+        
+
+        # MVV-LVA capture ordering
+        if captured_piece:
+            captured_value = abs(self.piece_values[captured_piece])
+            score += 10_000 + captured_value * 10 - moving_value
+
+        return score
+ 
+    
+
 
 
     def findBestMove(self, depth):

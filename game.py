@@ -304,7 +304,7 @@ while running:
 
     if not game_state.white_to_move:
         start = time.time()
-        move = bot.findBestMove(2)
+        move = bot.findBestMove(3)
         game_state.movePiece(move)
         moveSound.play()
         best = bot.eval
@@ -312,6 +312,7 @@ while running:
 
     else:
         best = bot.eval
+
 
 
     # Handeling keyboard inputs
@@ -446,6 +447,8 @@ while running:
     
     drawText("Depth: " + str(5) + "  Time: "  + str(round((end - start), 2)) + "s", 610, 20)
     evalBar(best)
+    if not game_state.white_to_move:
+        print(str(round((end - start), 2)))
 
     pygame.display.flip()
     clock.tick(60)

@@ -183,7 +183,7 @@ class Evaluator:
 
             while bitboard:
                 square = (bitboard & -bitboard).bit_length() - 1
-                table_square = square ^ 56 if is_black else square
+                table_square = square if is_black else square ^ 56
 
                 mid_score += sign * mid_table[table_square]
                 end_score += sign * end_table[table_square]

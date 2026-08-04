@@ -261,7 +261,7 @@ def evalBar(eval):
     padding = SQUARESIZE//3
     border_radius = SQUARESIZE //20
     width = SQUARESIZE//6
-    black_percent = 1 - (1.0 / (1.0 + math.exp(-eval / 200.0)))
+    black_percent = 1 - (1.0 / (1.0 + math.exp(-eval / 225.0)))
 
     border = pygame.Rect(
         board_x - padding - border_radius,
@@ -306,19 +306,17 @@ while running:
 
     if not game_state.white_to_move:
         start = time.time()
-        move = bot.findBestMove(4)
-        game_state.movePiece(move)
-        moveSound.play()
-        best = bot.eval
-        end = time.time()
-
-    if  game_state.white_to_move:
-        start = time.time()
         move = bot.findBestMove(3)
         game_state.movePiece(move)
         moveSound.play()
+        static_eval = bot.evaluator.evaluate(game_state)
+        print("Current-position evaluation:", static_eval)
+        print("Depth-search evaluation:", bot.eval)
         best = bot.eval
         end = time.time()
+
+    else:
+        best = bot.eval
 
 
 

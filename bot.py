@@ -9,6 +9,7 @@ EXACT = 0
 LOWER_BOUND = 1
 UPPER_BOUND = 2
 USE_TT = True
+MATE_SCORE = 100_000
 
 # Setting up the transposition table
 @dataclass
@@ -48,7 +49,8 @@ class Bot:
     
     def playRandom(self):
         moves = self.game.generateMoves()
-        return moves[random.randint(0, len(moves) - 1)]
+        if len(moves) > 0:
+            return moves[random.randint(0, len(moves) - 1)]
     
     # Mini Max w/ alpha beta pruning
     def miniMax(self, depth, alpha=float("-inf"), beta=float("inf")):
@@ -57,6 +59,28 @@ class Bot:
         original_alpha = alpha
         original_beta = beta
         hash_key = self.game.zobrist_hash
+
+        # Now generate all legal moves so we can explore them
+        moves = self.orderMoves(self.game.generateMoves())
+
+        # Gotta Check for checkmate and such
+        moving_color = "w" if self.game.white_to_move else "b"
+
+        if not moves:
+            if self.game.kingInCheck(moving_color):
+                if self.game.white_to_move:
+                    return -MATE_SCORE
+                else:
+                    return MATE_SCORE
+
+            return 0  # stalemate
+
+        if (
+            self.game.isThreefoldRepetition()
+            or self.game.isFiftyMoveDraw()
+            or self.game.hasInsufficientMaterial()
+        ):
+            return 0
         
         # If Depth is zero return
         if depth <= 0:
@@ -81,9 +105,6 @@ class Bot:
 
                 if alpha >= beta:
                     return entry.score
-        
-        # Now generate all legal moves so we can explore them
-        moves = self.orderMoves(self.game.generateMoves())
 
         if USE_TT:
             # Move TT move to front

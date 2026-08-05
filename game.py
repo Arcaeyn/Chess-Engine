@@ -42,7 +42,6 @@ def loadPieceImage(filename):
         (piece_size, piece_size),
     )
 
-
 PIECE_IMAGES = {
     "white_pawns": loadPieceImage("white-pawn.png"),
     "white_rooks": loadPieceImage("white-rook.png"),
@@ -175,7 +174,7 @@ def highlightBitboard(bitboard):
 
         bitboard &= bitboard - 1
 
-def highlightSquare(rank, file):
+def highlightSquare(rank, file, width=SQUARESIZE//17, color=HIGHLIGHT):
     board_x = (WIDTH - BOARDSIZE) // 2
     board_y = (HEIGHT - BOARDSIZE) // 2
 
@@ -191,15 +190,24 @@ def highlightSquare(rank, file):
 
     pygame.draw.rect(
         screen,
-        HIGHLIGHT,
+        color,
         rect,
-        width = SQUARESIZE//17
+        width
         
     )
 
-def drawText(text, x, y, color=(255, 255, 255)):
-    surface = font.render(str(text), True, color)
-    screen.blit(surface, (x, y))
+def displayCheckmate():
+    bRank, bFile = game_state.bitboardToSquare(game_state.black_kings)
+    wRank, wFile = game_state.bitboardToSquare(game_state.white_kings)
+
+    if game_state.white_to_move:
+        highlightSquare(wRank, wFile, SQUARESIZE, (200, 80, 80))
+        highlightSquare(bRank, bFile, SQUARESIZE, (80, 200, 80))
+
+    else:
+        highlightSquare(bRank, bFile, SQUARESIZE, (200, 80, 80))
+        highlightSquare(wRank, wFile, SQUARESIZE, (80, 200, 80))
+
 
 def drawText(text, x, y, color=(255, 255, 255)):
     surface = font.render(str(text), True, color)
@@ -303,21 +311,23 @@ end = 0
 
 
 while running:
-
-    if not game_state.white_to_move:
+    checkmate = game_state.isCheckmate()
+    if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot.findBestMove(3)
-        game_state.movePiece(move)
-        moveSound.play()
-        static_eval = bot.evaluator.evaluate(game_state)
-        print("Current-position evaluation:", static_eval)
-        print("Depth-search evaluation:", bot.eval)
-        best = bot.eval
-        end = time.time()
+        move = bot.findBestMove(4)
+        if move is not None:
+            last_move = move
+            game_state.movePiece(move)
+            moveSound.play()
+            static_eval = bot.evaluator.evaluate(game_state)
+            print("Current-position evaluation:", static_eval)
+            print("Depth-search evaluation:", bot.eval)
+            end = time.time()
 
-    else:
-        best = bot.eval
+  
 
+
+    best = bot.eval
     # Handeling keyboard inputs
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -432,7 +442,11 @@ while running:
             selected_file,
         )
 
+    if game_state.isCheckmate():
+            displayCheckmate()
+
     drawPieces()
+
 
     turn_text = (
         "White"

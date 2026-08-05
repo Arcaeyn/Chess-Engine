@@ -8,6 +8,12 @@ Ranks and files accepted by the public API are one-indexed (1 through 8).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from zobrist import (
+    PIECE_KEYS,
+    SIDE_TO_MOVE_KEY,
+    CASTLING_KEYS,
+    EN_PASSANT_KEYS,
+)
 
 
 ROOK_DIRECTIONS = ((1, 0), (-1, 0), (0, 1), (0, -1))
@@ -40,6 +46,8 @@ class Move:
     captured_piece: str | None = None
     captured_square: tuple[int, int] | None = None
     previous_state: tuple | None = None
+    previous_zobrist_hash: int | None = None
+
 
 
 class GameState:
@@ -117,6 +125,8 @@ class GameState:
         self.move_history: list[Move] = []
         self.position_history: list[tuple] = [self.positionKey()]
 
+        self.zobrist_hash = self.calculateZobristHash()
+
     @staticmethod
     def squareMask(rank: int, file: int) -> int:
         if not (1 <= rank <= 8 and 1 <= file <= 8):
@@ -152,6 +162,51 @@ class GameState:
             self.black_can_castle_queenside,
             self.en_passant_square,
         )
+
+    def calculateZobristHash(self):
+        zobrist_hash = 0
+
+        # We need to add every piece on the baord to our zobrsit hash
+        for piece_name in self.piece_names:
+            bitboard = getattr(self, piece_name)
+
+            while bitboard:
+                # We isolate the least-sig occupied square
+                piece_bit = bitboard &- bitboard
+
+                # Now we convert it to a square index
+                square = piece_bit.bit_length() - 1
+
+                # Ok now we have out square so we need to ask it to the combo
+                zobrist_hash ^= PIECE_KEYS[piece_name][square]
+
+                # Noq that were done hashing this piece we remove it from our bitboard
+                bitboard &= bitboard - 1
+
+        # Ok so supposdely its best to XOR the side key only on blacks moves
+        if not self.white_to_move:
+            zobrist_hash ^= SIDE_TO_MOVE_KEY
+
+        # also we need to hash the casteling info
+        if self.white_can_castle_kingside:
+            zobrist_hash ^= CASTLING_KEYS["white_kingside"]
+
+        if self.white_can_castle_queenside:
+            zobrist_hash ^= CASTLING_KEYS["white_queenside"]
+
+        if self.black_can_castle_kingside:
+            zobrist_hash ^= CASTLING_KEYS["black_kingside"]
+
+        if self.black_can_castle_queenside:
+            zobrist_hash ^= CASTLING_KEYS["black_queenside"]
+
+        # and finally we need to hash the current en passant file
+        if self.en_passant_square is not None:
+            rank, file = self.en_passant_square
+            zobrist_hash ^= EN_PASSANT_KEYS[file - 1]
+
+        return zobrist_hash
+
 
     def pieceColor(self, rank: int, file: int) -> str | None:
         mask = self.squareMask(rank, file)
@@ -290,6 +345,20 @@ class GameState:
         moving_color = "w" if move.moved_piece.startswith("white") else "b"
         if moving_color != ("w" if self.white_to_move else "b"):
             return False
+        
+
+        # Save everything undoMove() must restore exactly.
+        move.previous_zobrist_hash = self.zobrist_hash
+        move.previous_state = (
+            self.white_to_move,
+            self.white_can_castle_kingside,
+            self.white_can_castle_queenside,
+            self.black_can_castle_kingside,
+            self.black_can_castle_queenside,
+            self.en_passant_square,
+            self.halfmove_clock,
+            self.fullmove_number,
+        )
 
         # Infer special flags when callers construct a plain Move manually.
         if "kings" in move.moved_piece and abs(move.end_file - move.start_file) == 2:
@@ -302,19 +371,10 @@ class GameState:
         ):
             move.is_en_passant = True
 
-        move.previous_state = (
-            self.white_to_move,
-            self.white_can_castle_kingside,
-            self.white_can_castle_queenside,
-            self.black_can_castle_kingside,
-            self.black_can_castle_queenside,
-            self.en_passant_square,
-            self.halfmove_clock,
-            self.fullmove_number,
-        )
-
         start_mask = self.squareMask(move.start_rank, move.start_file)
         end_mask = self.squareMask(move.end_rank, move.end_file)
+        start_square = (move.start_rank - 1) * 8 + (move.start_file - 1)
+        end_square = (move.end_rank - 1) * 8 + (move.end_file - 1)
 
         if move.is_en_passant:
             move.captured_square = (move.start_rank, move.end_file)
@@ -323,21 +383,42 @@ class GameState:
 
         capture_rank, capture_file = move.captured_square
         capture_mask = self.squareMask(capture_rank, capture_file)
+        capture_square = (capture_rank - 1) * 8 + (capture_file - 1)
         move.captured_piece = self.getPiece(capture_rank, capture_file)
 
+        # Remove old non-piece state before changing it.
+        self.xorCastlingHash()
+        self.xorEnPassantHash()
+
+        # Remove the moving piece from its starting square.
+        self.zobrist_hash ^= PIECE_KEYS[move.moved_piece][start_square]
+
+        # Remove a captured piece from both the hash and its bitboard.
         if move.captured_piece is not None:
+            self.zobrist_hash ^= PIECE_KEYS[move.captured_piece][capture_square]
             captured_board = getattr(self, move.captured_piece)
             setattr(self, move.captured_piece, captured_board & ~capture_mask)
 
+        # Move the piece on the bitboards and add its destination hash key.
         moving_board = getattr(self, move.moved_piece) & ~start_mask
-        if move.promotion:
+        if move.promotion is not None:
             promoted_board = getattr(self, move.promotion) | end_mask
             setattr(self, move.promotion, promoted_board)
+            self.zobrist_hash ^= PIECE_KEYS[move.promotion][end_square]
         else:
             moving_board |= end_mask
+            self.zobrist_hash ^= PIECE_KEYS[move.moved_piece][end_square]
         setattr(self, move.moved_piece, moving_board)
 
+        # Castling also moves a rook, so hash both rook squares.
         if move.is_castle:
+            rook_name = "white_rooks" if move.moved_piece.startswith("white") else "black_rooks"
+            rook_start_file = 8 if move.end_file > move.start_file else 1
+            rook_end_file = 6 if move.end_file > move.start_file else 4
+            rook_start_square = (move.start_rank - 1) * 8 + (rook_start_file - 1)
+            rook_end_square = (move.start_rank - 1) * 8 + (rook_end_file - 1)
+            self.zobrist_hash ^= PIECE_KEYS[rook_name][rook_start_square]
+            self.zobrist_hash ^= PIECE_KEYS[rook_name][rook_end_square]
             self._move_castling_rook(move, undo=False)
 
         self._update_castling_rights(move)
@@ -356,12 +437,38 @@ class GameState:
         if not self.white_to_move:
             self.fullmove_number += 1
 
+        # Add the new non-piece state and flip side-to-move.
+        self.xorCastlingHash()
+        self.xorEnPassantHash()
+        self.zobrist_hash ^= SIDE_TO_MOVE_KEY
+
         self.move_history.append(move)
         self.white_to_move = not self.white_to_move
         self.position_history.append(self.positionKey())
+
         return True
 
+
+    def xorCastlingHash(self):
+        if self.white_can_castle_kingside:
+            self.zobrist_hash ^= CASTLING_KEYS["white_kingside"]
+
+        if self.white_can_castle_queenside:
+            self.zobrist_hash ^= CASTLING_KEYS["white_queenside"]
+
+        if self.black_can_castle_kingside:
+            self.zobrist_hash ^= CASTLING_KEYS["black_kingside"]
+
+        if self.black_can_castle_queenside:
+            self.zobrist_hash ^= CASTLING_KEYS["black_queenside"]
+
+    def xorEnPassantHash(self):
+        if self.en_passant_square is not None:
+            rank, file = self.en_passant_square
+            self.zobrist_hash ^= EN_PASSANT_KEYS[file - 1]
+
     def undoMove(self, move: Move | None = None) -> bool:
+
         if not self.move_history:
             return False
         if move is None:
@@ -408,6 +515,9 @@ class GameState:
             self.halfmove_clock,
             self.fullmove_number,
         ) = move.previous_state
+
+        self.zobrist_hash = move.previous_zobrist_hash
+        
         return True
 
     def _move_castling_rook(self, move: Move, undo: bool) -> None:

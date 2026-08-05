@@ -318,8 +318,6 @@ while running:
     else:
         best = bot.eval
 
-
-
     # Handeling keyboard inputs
     for event in pygame.event.get():
         if event.type == pygame.QUIT:

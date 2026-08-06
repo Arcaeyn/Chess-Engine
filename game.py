@@ -208,6 +208,16 @@ def displayCheckmate():
         highlightSquare(bRank, bFile, SQUARESIZE, (200, 80, 80))
         highlightSquare(wRank, wFile, SQUARESIZE, (80, 200, 80))
 
+def traverseMoves(game_state):
+    curr = -2
+    pass
+
+def displayDraw():
+    bRank, bFile = game_state.bitboardToSquare(game_state.black_kings)
+    wRank, wFile = game_state.bitboardToSquare(game_state.white_kings)
+
+    highlightSquare(wRank, wFile, SQUARESIZE, (140, 140, 140))
+    highlightSquare(bRank, bFile, SQUARESIZE, (140, 140, 140))
 
 def drawText(text, x, y, color=(255, 255, 255)):
     surface = font.render(str(text), True, color)
@@ -288,7 +298,7 @@ def evalBar(eval):
         board_x - padding,
         board_y,
         width,
-        min(BOARDSIZE * black_percent, BOARDSIZE)
+        min(BOARDSIZE * black_percent, BOARDSIZE - border_radius)
     )
 
     pygame.draw.rect(screen, HIGHLIGHT, border)
@@ -314,7 +324,7 @@ while running:
     checkmate = game_state.isCheckmate()
     if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot.findBestMove(4)
+        move = bot.findBestMove(3)
         if move is not None:
             last_move = move
             game_state.movePiece(move)
@@ -324,8 +334,7 @@ while running:
             print("Depth-search evaluation:", bot.eval)
             end = time.time()
 
-  
-
+   
 
     best = bot.eval
     # Handeling keyboard inputs

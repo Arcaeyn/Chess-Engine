@@ -1,5 +1,6 @@
 # evaluation.py
 from board import GameState
+import math
 
 class Evaluator:
     def __init__(self, game : GameState):
@@ -147,8 +148,10 @@ class Evaluator:
     def evaluate(self, game):
         score = 0
 
-        score += self.material()
+        material = self.material()
+        score += material
         score += self.piece_square()
+        score += self.mopUp(material)
         #score += self.mobilty()
 
         return score
@@ -214,3 +217,27 @@ class Evaluator:
                     bitboard &= bitboard - 1
 
         return score
+
+    def mopUp(self, material):
+        bonus = 0
+        if self.game.white_to_move:
+            if material > 500 and self.game.occupied.bit_count() < 10:
+                rankW, fileW = self.game.bitboardToSquare(self.game.white_kings)
+                rankB, fileB = self.game.bitboardToSquare(self.game.black_kings)
+                bonus = abs(math.sqrt((rankW - rankB) ** 2 + (fileW - fileB) ** 2)) * 10
+
+                if self.game.kingInCheck("b"):
+                    bonus += 50
+
+        else:
+            if material < -500 and self.game.occupied.bit_count() < 10:
+                rankW, fileW = self.game.bitboardToSquare(self.game.white_kings)
+                rankB, fileB = self.game.bitboardToSquare(self.game.black_kings)
+                bonus = abs(math.sqrt((rankW - rankB) ** 2 + (fileW - fileB) ** 2)) * -10
+
+                if self.game.kingInCheck("w"):
+                    bonus -= 50
+                
+
+
+        return bonus

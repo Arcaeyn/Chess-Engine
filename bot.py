@@ -4,7 +4,7 @@ from evaluation import Evaluator
 from dataclasses import dataclass
 import time
 
-QDEPTHMAX = 8
+QDEPTHMAX = 5
 EXACT = 0
 LOWER_BOUND = 1
 UPPER_BOUND = 2
@@ -60,26 +60,11 @@ class Bot:
         original_beta = beta
         hash_key = self.game.zobrist_hash
 
-        # Now generate all legal moves so we can explore them
-        moves = self.orderMoves(self.game.generateMoves())
-
-        # Gotta Check for checkmate and such
-        moving_color = "w" if self.game.white_to_move else "b"
-
-        if not moves:
-            if self.game.kingInCheck(moving_color):
-                if self.game.white_to_move:
-                    return -MATE_SCORE
-                else:
-                    return MATE_SCORE
-
-            return 0  # stalemate
-
         if (
-            self.game.isThreefoldRepetition()
-            or self.game.isFiftyMoveDraw()
-            or self.game.hasInsufficientMaterial()
-        ):
+        self.game.isThreefoldRepetition()
+        or self.game.isFiftyMoveDraw()
+        or self.game.hasInsufficientMaterial()
+    ):
             return 0
         
         # If Depth is zero return
@@ -105,6 +90,21 @@ class Bot:
 
                 if alpha >= beta:
                     return entry.score
+                
+         # Now generate all legal moves so we can explore them
+        moves = self.orderMoves(self.game.generateMoves())
+
+        # Gotta Check for checkmate and such
+        moving_color = "w" if self.game.white_to_move else "b"
+
+        if not moves:
+            if self.game.kingInCheck(moving_color):
+                if self.game.white_to_move:
+                    return -MATE_SCORE
+                else:
+                    return MATE_SCORE
+
+            return 0  # stalemate
 
         if USE_TT:
             # Move TT move to front
@@ -283,12 +283,17 @@ class Bot:
     # This helps make our eval more accurate so that on turns where black has just captured and white was to recapture 
     # next turn we make sure to account for that, it also allows us to explore the most "interesting" moves to a much deeper depth making our engine stronger
     def quiescence(self, alpha=float("-inf"), beta=float("inf"), qdepth = 0):
+
+        # Update node count
         self.nodes += 1
         if qdepth == 1:
             self.qnodes += 1
+
+        
         if qdepth >= QDEPTHMAX:
             self.qmax += 1
             return self.evaluator.evaluate(self.game)
+        
         # Evaluation if we make no further tactical move.
         stand_pat = self.evaluator.evaluate(self.game)
 
@@ -311,6 +316,8 @@ class Bot:
             for move in tactical_moves:
                 self.game.movePiece(move)
                 score = self.quiescence(alpha, beta, qdepth + 1)
+
+                # every time we call quisemce we add this 
                 self.qavg += 1
                 self.game.undoMove(move)
 

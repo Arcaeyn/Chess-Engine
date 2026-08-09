@@ -1,6 +1,6 @@
 import random
-from board import GameState, Move
-from evaluation import Evaluator
+from gameLogic.board import GameState, Move
+from bot.evaluation import Evaluator
 from dataclasses import dataclass
 import time
 
@@ -529,7 +529,8 @@ class Bot:
 
     def findMoveToggle(self, baseDepth, pref=None):
         if self.useIterativeDeepening:
-            return self.findBestMove(baseDepth)
+            score, move = self.findBestMove(baseDepth)
+            return move
 
 
         else:

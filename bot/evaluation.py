@@ -1,5 +1,5 @@
 # evaluation.py
-from board import GameState
+from gameLogic.board import GameState
 import math
 
 class Evaluator:

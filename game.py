@@ -2,8 +2,8 @@ import pygame
 import time
 import math
 
-from board import GameState, Move
-from bot import Bot
+from gameLogic.board import GameState, Move
+from bot.bot import Bot
 
 pygame.init()
 pygame.mixer.init()
@@ -22,7 +22,7 @@ HIGHLIGHT = (80, 80, 120)
 BORDER = (80, 80, 120)
 
 font = pygame.font.Font(None, 28)
-moveSound = pygame.mixer.Sound("sounds/move-self.mp3")
+moveSound = pygame.mixer.Sound("assets/sounds/move-self.mp3")
 game_state = GameState()
 bot = Bot(game_state)
 
@@ -32,7 +32,7 @@ pygame.display.set_caption("Chess Engine")
 
 def loadPieceImage(filename):
     image = pygame.image.load(
-        f"pieces-basic-png/{filename}"
+        f"assets/pieces-basic-png/{filename}"
     ).convert_alpha()
 
     piece_size = SQUARESIZE - PADDING * 2
@@ -324,7 +324,7 @@ while running:
     checkmate = game_state.isCheckmate()
     if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot.findBestMove(3)
+        move = bot.findBestMove(4)
         if move is not None:
             last_move = move
             game_state.movePiece(move)

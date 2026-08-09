@@ -8,7 +8,7 @@ Ranks and files accepted by the public API are one-indexed (1 through 8).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from zobrist import (
+from gameLogic.zobrist import (
     PIECE_KEYS,
     SIDE_TO_MOVE_KEY,
     CASTLING_KEYS,

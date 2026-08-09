@@ -332,9 +332,9 @@ while running:
             static_eval = bot.evaluator.evaluate(game_state)
             print("Current-position evaluation:", static_eval)
             print("Depth-search evaluation:", bot.eval)
-            end = time.time()
+            end = time.time()  
 
-   
+
 
     best = bot.eval
     # Handeling keyboard inputs

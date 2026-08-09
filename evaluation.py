@@ -227,7 +227,7 @@ class Evaluator:
                 bonus = abs(math.sqrt((rankW - rankB) ** 2 + (fileW - fileB) ** 2)) * 10
 
                 if self.game.kingInCheck("b"):
-                    bonus += 50
+                    bonus -= 50
 
         else:
             if material < -500 and self.game.occupied.bit_count() < 10:
@@ -236,7 +236,7 @@ class Evaluator:
                 bonus = abs(math.sqrt((rankW - rankB) ** 2 + (fileW - fileB) ** 2)) * -10
 
                 if self.game.kingInCheck("w"):
-                    bonus -= 50
+                    bonus += 50
                 
 
 

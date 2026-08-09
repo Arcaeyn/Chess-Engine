@@ -21,15 +21,27 @@ class TTEntry:
 
 class Bot:
     def __init__(self, game : GameState):
-        self.depth = 3
-        self.game = game
-        self.nodes = 0
-        self.evaluator = Evaluator(self.game)
-        self.bestscore = 0
+
+        # Statistics
         self.eval = 0
         self.qnodes = 1
         self.qmax = 0
         self.qavg = 0
+        self.tt_hits = 0
+        self.nodes = 0
+
+        # Feature Switching for Search Fucntion
+        self.useTranspositionTable = True
+        self.useQuiescence = True
+        self.useAlphaBetaPruning = True
+        self.useIterativeDeepening = True
+        self.useMoveOrdering = True
+
+        # Other importnat stuff
+        self.depth = 3
+        self.game = game
+        self.evaluator = Evaluator(self.game)
+        self.bestscore = 0
         self.piece_values = {
             "white_pawns": 100,
             "black_pawns": -100,
@@ -45,7 +57,6 @@ class Bot:
             "black_kings": 0,
         }
         self.transposition_table = {}
-        self.tt_hits = 0
     
     def playRandom(self):
         moves = self.game.generateMoves()
@@ -221,7 +232,10 @@ class Bot:
     def bestMoveAtDepth(self, depth, pref):
         bestMove = None
         moves = self.game.generateMoves()
-        orderedMoves = self.orderMoves(moves)
+        if self.useMoveOrdering:
+            orderedMoves = self.orderMoves(moves)
+        else: 
+            orderedMoves = moves
 
         # Reorder moves for iterative deepening, if we have a preffered move look at it first
         if pref is not None and pref in orderedMoves:
@@ -236,7 +250,7 @@ class Bot:
 
         for move in orderedMoves:
             self.game.movePiece(move)
-            score = self.miniMax(depth - 1, alpha, beta)
+            score = self.searchToggle(depth - 1, alpha, beta)
             self.game.undoMove(move)
 
             if maximizing:
@@ -244,14 +258,17 @@ class Bot:
                     best = score
                     bestMove = move
 
-                alpha = max(alpha, best)
+                if self.useAlphaBetaPruning:
+                    alpha = max(alpha, best)
 
             else:
                 if score < best:
                     best = score
                     bestMove = move
 
-                beta = min(beta, best)
+                if self.useAlphaBetaPruning:
+                    beta = min(beta, best)
+
         self.eval = best
         return best, bestMove
 
@@ -372,3 +389,148 @@ class Bot:
             and move_a.is_en_passant == move_b.is_en_passant
         )
     
+
+    def searchToggle(self, depth, alpha=float("-inf"), beta=float("inf")):
+        # Update Node Count
+        self.nodes += 1
+        original_alpha = alpha
+        original_beta = beta
+
+        # Handle Draws
+        if (
+                self.game.isThreefoldRepetition()
+                or self.game.isFiftyMoveDraw()
+                or self.game.hasInsufficientMaterial()
+            ):
+                    return 0
+                
+        # If Depth is zero return
+        if depth <= 0:
+            if self.useQuiescence:
+                return self.quiescence(alpha, beta)
+
+            else:
+                return self.evaluator.evaluate(self.game)
+
+        # Transpostion Table
+        if self.useTranspositionTable:
+            hash_key = self.game.zobrist_hash
+            entry = self.transposition_table.get(hash_key)
+            tt_move = entry.best_move if entry else None
+
+            if entry is not None and entry.depth >= depth:
+                self.tt_hits += 1
+                if entry.flag == EXACT:
+                    return entry.score
+
+                if entry.flag == LOWER_BOUND:
+                    alpha = max(alpha, entry.score)
+
+                elif entry.flag == UPPER_BOUND:
+                    beta = min(beta, entry.score)
+
+                if alpha >= beta:
+                    return entry.score
+
+        # Generate All Legal Moves
+        if self.useMoveOrdering:
+            moves = self.orderMoves(self.game.generateMoves())
+
+        else:
+            moves = self.game.generateMoves()          
+
+        # Check for Checkmate
+        moving_color = "w" if self.game.white_to_move else "b"
+        
+        if not moves:
+            if self.game.kingInCheck(moving_color):
+                if self.game.white_to_move:
+                    return -MATE_SCORE
+                else:
+                    return MATE_SCORE
+
+            return 0  # stalemate
+
+        if self.useTranspositionTable:
+            # Move TT move to front
+            if tt_move is not None:
+                for index, move in enumerate(moves):
+                    if self.sameMove(move, tt_move):
+                        moves.insert(0, moves.pop(index))
+                        break
+
+        best_move = None
+
+        # If its whites turn we will keep updating alpha
+        if self.game.white_to_move:
+            best = float("-inf")
+            for move in moves:
+                self.game.movePiece(move)
+                score = self.searchToggle(depth - 1, alpha, beta)
+                self.game.undoMove(move)
+
+                if score > best:
+                    best = score
+                    best_move = move
+
+                if self.useAlphaBetaPruning:
+                    alpha = max(alpha, best)
+
+                    if alpha >= beta:
+                        break 
+
+        # Otherwise update beta
+        else:
+            best = float("inf")
+
+            for move in moves:
+                self.game.movePiece(move)
+                score = self.searchToggle(depth - 1, alpha, beta)
+                self.game.undoMove(move)
+
+                if score < best:
+                    best = score
+                    best_move = move
+
+
+                if self.useAlphaBetaPruning:
+                    beta = min(beta, best)
+
+                    if alpha >= beta:
+                        break
+
+        # Determine what kind of value was produced.
+        if best <= original_alpha:
+            flag = UPPER_BOUND
+
+        elif best >= original_beta:
+            flag = LOWER_BOUND
+
+        else:
+            flag = EXACT
+
+        # Update Transposition table
+        if self.useTranspositionTable:
+            new_entry = TTEntry(
+                        depth=depth,
+                        score=best,
+                        flag=flag,
+                        best_move=best_move,
+                    )
+            
+            old_entry = self.transposition_table.get(hash_key)
+
+            # Do not replace a deeper result with a shallower result.
+            if old_entry is None or depth >= old_entry.depth:
+                self.transposition_table[hash_key] = new_entry
+
+        return best
+
+
+    def findMoveToggle(self, baseDepth, pref=None):
+        if self.useIterativeDeepening:
+            return self.findBestMove(baseDepth)
+
+
+        else:
+            return self.bestMoveAtDepth(baseDepth, None)

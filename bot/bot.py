@@ -29,6 +29,7 @@ class Bot:
         self.qavg = 0
         self.tt_hits = 0
         self.nodes = 0
+        self.pvs_researches = 0
 
         # Feature Switching for Search Fucntion
         self.useTranspositionTable = True
@@ -36,7 +37,8 @@ class Bot:
         self.useAlphaBetaPruning = True
         self.useIterativeDeepening = True
         self.useMoveOrdering = True
-        self.useAspirationWindow = True
+        self.useAspirationWindow = True # Alpha beta dependant
+        self.usePrincipalVariationSearch = True # Alpha beta dependant
 
         # Other importnat stuff
         self.depth = 3
@@ -233,6 +235,7 @@ class Bot:
     # Caluclates the score of a move at a depth, this is needed for out iterative deepening
     def bestMoveAtDepth(self, depth, pref, alpha = float("-inf"), beta = float("inf")):
         bestMove = None
+        first_move = True
         moves = self.game.generateMoves()
         if self.useMoveOrdering:
             orderedMoves = self.orderMoves(moves)
@@ -249,7 +252,24 @@ class Bot:
 
         for move in orderedMoves:
             self.game.movePiece(move)
-            score = self.searchToggle(depth - 1, alpha, beta)
+
+            # Toggle for principal variation search
+            if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
+                score = self.searchToggle(depth - 1, alpha, beta)
+                first_move = False
+            else:
+                if maximizing:
+                    score = self.searchToggle(depth - 1, alpha, alpha + 1)
+
+                else:
+                    score = self.searchToggle(depth - 1, beta - 1, beta)
+
+                # If we cause a cutoff research
+                if alpha < score < beta:
+                    self.pvs_researches += 1
+                    score = self.searchToggle(depth - 1, alpha, beta)
+
+
             self.game.undoMove(move)
 
             if maximizing:
@@ -329,11 +349,13 @@ class Bot:
  f"TT entries: {len(self.transposition_table)}, "
     f"TT hits: {self.tt_hits}"
 )
+            print("PVS researches: " + str(self.pvs_researches))
             self.nodes = 0
             self.tt_hits = 0
             self.qnodes = 1
             self.qmax = 0
             self.qavg = 0
+            self.pvs_researches = 0
 
         self.eval = score
         return best_move
@@ -509,9 +531,24 @@ class Bot:
         # If its whites turn we will keep updating alpha
         if self.game.white_to_move:
             best = float("-inf")
+            first_move = True
+
             for move in moves:
                 self.game.movePiece(move)
-                score = self.searchToggle(depth - 1, alpha, beta)
+                
+                # Toggle for principal variation search
+                if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
+                    score = self.searchToggle(depth - 1, alpha, beta)
+                    first_move = False
+                else:
+                    score = self.searchToggle(depth - 1, alpha, alpha + 1)
+
+                    # The move improved the bound without causing a cutoff,
+                    # so re-search it with the full window for an exact score.
+                    if alpha < score < beta:
+                        self.pvs_researches += 1
+                        score = self.searchToggle(depth - 1, alpha, beta)
+
                 self.game.undoMove(move)
 
                 if score > best:
@@ -527,10 +564,24 @@ class Bot:
         # Otherwise update beta
         else:
             best = float("inf")
+            first_move = True
 
             for move in moves:
                 self.game.movePiece(move)
-                score = self.searchToggle(depth - 1, alpha, beta)
+                
+                # Toggle for principal variation search
+                if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
+                    score = self.searchToggle(depth - 1, alpha, beta)
+                    first_move = False
+                else:
+                    score = self.searchToggle(depth - 1, beta - 1, beta)
+
+                    # The move improved the bound without causing a cutoff,
+                    # so re-search it with the full window for an exact score.
+                    if alpha < score < beta:
+                        self.pvs_researches += 1
+                        score = self.searchToggle(depth - 1, alpha, beta)
+
                 self.game.undoMove(move)
 
                 if score < best:

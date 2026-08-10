@@ -26,7 +26,7 @@ moveSound = pygame.mixer.Sound("assets/sounds/move-self.mp3")
 game_state = GameState()
 bot1 = Bot(game_state)
 bot2 = Bot(game_state)
-bot2.useAspirationWindow = True
+bot2.usePrincipalVariationSearch = True
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Engine")
@@ -326,7 +326,7 @@ while running:
     checkmate = game_state.isCheckmate()
     if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot2.findMoveToggle(5)
+        move = bot2.findMoveToggle(4)
         if move is not None:
             last_move = move
             game_state.movePiece(move)

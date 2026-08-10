@@ -8,8 +8,8 @@ QDEPTHMAX = 5
 EXACT = 0
 LOWER_BOUND = 1
 UPPER_BOUND = 2
-USE_TT = True
 MATE_SCORE = 100_000
+ASPIRATION_WINDOW = 50
 
 # Setting up the transposition table
 @dataclass
@@ -36,6 +36,7 @@ class Bot:
         self.useAlphaBetaPruning = True
         self.useIterativeDeepening = True
         self.useMoveOrdering = True
+        self.useAspirationWindow = True
 
         # Other importnat stuff
         self.depth = 3
@@ -57,6 +58,7 @@ class Bot:
             "black_kings": 0,
         }
         self.transposition_table = {}
+        self.aspirationWindow = ASPIRATION_WINDOW
     
     def playRandom(self):
         moves = self.game.generateMoves()
@@ -83,24 +85,24 @@ class Bot:
             return self.quiescence(alpha, beta)
         
 
-        if USE_TT:
-            # Let us now check the transpotion table
-            entry = self.transposition_table.get(hash_key)
-            tt_move = entry.best_move if entry else None
+        
+        # Let us now check the transpotion table
+        entry = self.transposition_table.get(hash_key)
+        tt_move = entry.best_move if entry else None
 
-            if entry is not None and entry.depth >= depth:
-                self.tt_hits += 1
-                if entry.flag == EXACT:
-                    return entry.score
+        if entry is not None and entry.depth >= depth:
+            self.tt_hits += 1
+            if entry.flag == EXACT:
+                return entry.score
 
-                if entry.flag == LOWER_BOUND:
-                    alpha = max(alpha, entry.score)
+            if entry.flag == LOWER_BOUND:
+                alpha = max(alpha, entry.score)
 
-                elif entry.flag == UPPER_BOUND:
-                    beta = min(beta, entry.score)
+            elif entry.flag == UPPER_BOUND:
+                beta = min(beta, entry.score)
 
-                if alpha >= beta:
-                    return entry.score
+            if alpha >= beta:
+                return entry.score
                 
          # Now generate all legal moves so we can explore them
         moves = self.orderMoves(self.game.generateMoves())
@@ -117,13 +119,13 @@ class Bot:
 
             return 0  # stalemate
 
-        if USE_TT:
-            # Move TT move to front
-            if tt_move is not None:
-                for index, move in enumerate(moves):
-                    if self.sameMove(move, tt_move):
-                        moves.insert(0, moves.pop(index))
-                        break
+
+        # Move TT move to front
+        if tt_move is not None:
+            for index, move in enumerate(moves):
+                if self.sameMove(move, tt_move):
+                    moves.insert(0, moves.pop(index))
+                    break
 
         best_move = None
         # If its whites turn we will keep updating alpha
@@ -229,7 +231,7 @@ class Bot:
         return score
 
     # Caluclates the score of a move at a depth, this is needed for out iterative deepening
-    def bestMoveAtDepth(self, depth, pref):
+    def bestMoveAtDepth(self, depth, pref, alpha = float("-inf"), beta = float("inf")):
         bestMove = None
         moves = self.game.generateMoves()
         if self.useMoveOrdering:
@@ -245,9 +247,6 @@ class Bot:
         best = float("-inf") if self.game.white_to_move else float("inf")
         maximizing = self.game.white_to_move
 
-        alpha = float("-inf")
-        beta = float("inf")
-
         for move in orderedMoves:
             self.game.movePiece(move)
             score = self.searchToggle(depth - 1, alpha, beta)
@@ -261,6 +260,9 @@ class Bot:
                 if self.useAlphaBetaPruning:
                     alpha = max(alpha, best)
 
+                    if alpha >= beta:
+                        break
+
             else:
                 if score < best:
                     best = score
@@ -269,18 +271,59 @@ class Bot:
                 if self.useAlphaBetaPruning:
                     beta = min(beta, best)
 
+                    if alpha >= beta:
+                        break
+
         self.eval = best
         return best, bestMove
 
     # Iterative Deepening
     def findBestMove(self, maxDepth):
         best_move = None
+        previous_score = 0
 
-        # Wow! Iterative Deepening!
+        # Iterative Deepening
         for curr in range(1, maxDepth + 1):
-            start = time.time()
-            score, best_move = self.bestMoveAtDepth(curr, best_move)
-            end = time.time()
+            if self.useAspirationWindow and self.useAlphaBetaPruning:
+                if curr == 1:
+                    start = time.time()
+                    score, best_move = self.bestMoveAtDepth(curr, best_move)
+                    end = time.time()
+
+                # Impliment aspiration windows
+                else:
+                    start = time.time()
+                    window = self.aspirationWindow
+                    alpha = previous_score - window
+                    beta = previous_score  + window
+
+                    while True:
+                        score, candidate = self.bestMoveAtDepth(curr, best_move, alpha, beta)
+
+                        if score <= alpha:
+                            # Fail-low: widen downward
+                            window *= 2
+                            alpha = previous_score - window
+
+                        elif score >= beta:
+                            # Fail-high: widen upward
+                            window *= 2
+                            beta = previous_score + window
+
+                        else:
+                            # Score is safely inside the window
+                            best_move = candidate
+                            break
+                    end = time.time()
+                
+
+                previous_score = score
+
+            else:
+                start = time.time()
+                score, best_move = self.bestMoveAtDepth(curr, best_move)
+                end = time.time()
+
             print("Spent " + str(round(end - start, 2)) + "(s) exploring " + str(self.nodes) + " nodes of which " + str(self.qnodes) + " were qnodes. " + str(self.qmax) + " reached max Qdepth. Avg Q Depth is " + str(self.qavg/self.qnodes) + " Base Depth is "+ str(curr) + ".")
             print(
  f"TT entries: {len(self.transposition_table)}, "
@@ -390,6 +433,8 @@ class Bot:
         )
     
 
+    # These functions let me toggle on or off features, theorertically the checks for the toggles will make it a little bit slower 
+    # But these little functions will help me enourmously in testing if a feature actually imporves a bot or not.
     def searchToggle(self, depth, alpha=float("-inf"), beta=float("inf")):
         # Update Node Count
         self.nodes += 1
@@ -529,9 +574,10 @@ class Bot:
 
     def findMoveToggle(self, baseDepth, pref=None):
         if self.useIterativeDeepening:
-            score, move = self.findBestMove(baseDepth)
+            move = self.findBestMove(baseDepth)
             return move
 
 
         else:
-            return self.bestMoveAtDepth(baseDepth, None)
+            score, move = self.bestMoveAtDepth(baseDepth, None)
+            return move

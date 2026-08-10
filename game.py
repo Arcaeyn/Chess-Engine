@@ -24,7 +24,9 @@ BORDER = (80, 80, 120)
 font = pygame.font.Font(None, 28)
 moveSound = pygame.mixer.Sound("assets/sounds/move-self.mp3")
 game_state = GameState()
-bot = Bot(game_state)
+bot1 = Bot(game_state)
+bot2 = Bot(game_state)
+bot2.useAspirationWindow = True
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Engine")
@@ -324,19 +326,18 @@ while running:
     checkmate = game_state.isCheckmate()
     if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot.findBestMove(4)
+        move = bot2.findMoveToggle(5)
         if move is not None:
             last_move = move
             game_state.movePiece(move)
             moveSound.play()
-            static_eval = bot.evaluator.evaluate(game_state)
+            static_eval = bot2.evaluator.evaluate(game_state)
             print("Current-position evaluation:", static_eval)
-            print("Depth-search evaluation:", bot.eval)
+            print("Depth-search evaluation:", bot2.eval)
             end = time.time()  
 
 
-
-    best = bot.eval
+    best = bot2.eval
     # Handeling keyboard inputs
     for event in pygame.event.get():
         if event.type == pygame.QUIT:

@@ -1,6 +1,7 @@
 import pygame
 import time
 import math
+import random
 
 from gameLogic.board import GameState, Move
 from bot.bot import Bot
@@ -20,13 +21,60 @@ LIGHT = (232, 239, 255)
 DARK = (120, 142, 191)
 HIGHLIGHT = (80, 80, 120)
 BORDER = (80, 80, 120)
+TEST_FENS = [
+    # Italian
+    "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 1 5",
+
+    # Ruy Lopez
+    "r1bqkb1r/1ppp1ppp/p1n2n2/4p3/B3P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 5",
+
+    # Scotch
+    "r1bqkb1r/pppp1ppp/2n2n2/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5",
+
+    # Four Knights
+    "r1bqk2r/pppp1ppp/2n2n2/1B2p3/1b2P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 6 5",
+
+    # Queen's Gambit Declined
+    "rnbqk2r/ppp1bppp/4pn2/3p2B1/2PP4/2N5/PP2PPPP/R2QKBNR w KQkq - 4 5",
+
+    # Slav
+    "rnbqkb1r/pp2pppp/2p2n2/8/2pP4/2N2N2/PP2PPPP/R1BQKB1R w KQkq - 0 5",
+
+    # Caro-Kann Exchange
+    "r1bqkbnr/pp2pppp/2n5/3p4/3P4/3B4/PPP2PPP/RNBQK1NR w KQkq - 2 5",
+
+    # French Exchange
+    "rnbqkb1r/ppp2ppp/5n2/3p4/3P4/5N2/PPP2PPP/RNBQKB1R w KQkq - 2 5",
+
+    # English
+    "rnbqkb1r/ppp2ppp/8/3np3/8/2N3P1/PP1PPP1P/R1BQKBNR w KQkq - 0 5",
+
+    # Réti
+    "rnbqk2r/ppp1bppp/4pn2/3p4/8/5NP1/PPPPPPBP/RNBQ1RK1 w kq - 2 5",
+
+    # Open Sicilian
+    "rnbqkb1r/pp2pppp/3p1n2/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5",
+
+    # Alapin Sicilian
+    "rnbqkb1r/pp1ppppp/8/3nP3/3p4/2P5/PP3PPP/RNBQKBNR w KQkq - 0 5",
+
+    # Scandinavian
+    "rnbqkb1r/ppp1pppp/5n2/8/3P4/2N5/PPP2PPP/R1BQKBNR w KQkq - 1 5",
+
+    # King's Indian
+    "rnbqk2r/ppp1ppbp/3p1np1/8/2PPP3/2N5/PP3PPP/R1BQKBNR w KQkq - 0 5",
+
+    # Nimzo-Indian
+    "rnbq1rk1/pppp1ppp/4pn2/8/1bPP4/2N1P3/PP3PPP/R1BQKBNR w KQ - 1 5",
+]
 
 font = pygame.font.Font(None, 28)
 moveSound = pygame.mixer.Sound("assets/sounds/move-self.mp3")
 game_state = GameState()
 bot1 = Bot(game_state)
 bot2 = Bot(game_state)
-bot2.usePrincipalVariationSearch = True
+bot1.useMoveOrdering = True
+game_state.loadFen(TEST_FENS[random.randint(0, len(TEST_FENS) - 1)])
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Engine")
@@ -326,7 +374,7 @@ while running:
     checkmate = game_state.isCheckmate()
     if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot2.findMoveToggle(4)
+        move = bot2.findMoveToggle(3)
         if move is not None:
             last_move = move
             game_state.movePiece(move)
@@ -335,7 +383,6 @@ while running:
             print("Current-position evaluation:", static_eval)
             print("Depth-search evaluation:", bot2.eval)
             end = time.time()  
-
 
     best = bot2.eval
     # Handeling keyboard inputs
@@ -472,7 +519,7 @@ while running:
 
     screen.blit(turn_label, (100, 20))
     
-    drawText("Depth: " + str(5) + "  Time: "  + str(round((end - start), 2)) + "s", 610, 20)
+    drawText("Depth: " + str(bot2.depth) + "  Time: "  + str(round((end - start), 2)) + "s", 610, 20)
     evalBar(best)
     if not game_state.white_to_move:
         print(str(round((end - start), 2)))

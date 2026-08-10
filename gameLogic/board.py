@@ -127,6 +127,79 @@ class GameState:
 
         self.zobrist_hash = self.calculateZobristHash()
 
+    def loadFen(self, fen):
+        self.resetBoard()
+
+        pieces = True
+        piece_map = {
+            "p": "black_pawns",
+            "r": "black_rooks",
+            "n": "black_knights",
+            "b": "black_bishops",
+            "q": "black_queens",
+            "k": "black_kings",
+            "P": "white_pawns",
+            "R": "white_rooks",
+            "N": "white_knights",
+            "B": "white_bishops",
+            "Q": "white_queens",
+            "K": "white_kings",
+    }
+
+        # Clear the current position.
+        for piece_name in self.piece_names:
+            setattr(self, piece_name, 0)
+
+        square_index = 65
+        for char in fen:
+            if char == " ":
+                pieces = False
+
+            if pieces:
+                if char.isdigit():
+                    square_index -= int(char)
+
+                elif char != "/":
+                    square_index -= 1
+
+                    fen_index = 64 - square_index
+
+                    bit_index = (
+                        (7 - fen_index // 8) * 8
+                        + fen_index % 8
+                    )
+
+                    mask = 1 << bit_index
+
+                    piece_name = piece_map[char]
+                    bitboard = getattr(self, piece_name)
+                    setattr(self, piece_name, bitboard | mask)
+
+            else:
+                if char != " ":
+                    # Handle whos move it is
+                    if char == "w":
+                        self.white_to_move = True
+                    elif char == "b":
+                        self.white_to_move = False
+
+                    # Handle castling
+                    if char == "K":
+                        self.white_can_castle_kingside = True
+                    elif char == "Q":
+                        self.white_can_castle_queenside = True
+
+                    elif char == "k":
+                        self.black_can_castle_kingside = True
+
+                    elif char == "q":
+                        self.black_can_castle_queenside = True
+
+                    # TODO: halfmove clock and enpassant
+
+            self.zobrist_hash = self.calculateZobristHash()
+
+
     @staticmethod
     def squareMask(rank: int, file: int) -> int:
         if not (1 <= rank <= 8 and 1 <= file <= 8):

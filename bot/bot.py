@@ -21,7 +21,6 @@ class TTEntry:
 
 class Bot:
     def __init__(self, game : GameState):
-
         # Statistics
         self.eval = 0
         self.qnodes = 1
@@ -32,16 +31,18 @@ class Bot:
         self.pvs_researches = 0
 
         # Feature Switching for Search Fucntion
-        self.useTranspositionTable = True
-        self.useQuiescence = True
-        self.useAlphaBetaPruning = True
-        self.useIterativeDeepening = True
-        self.useMoveOrdering = True
-        self.useAspirationWindow = True # Alpha beta dependant
-        self.usePrincipalVariationSearch = True # Alpha beta dependant
+        self.useTranspositionTable = True           # 1            
+        self.useQuiescence = True                   # 2
+        self.useAlphaBetaPruning = True             # 3
+        self.useIterativeDeepening = True           # 4
 
-        # Other importnat stuff
-        self.depth = 3
+        # Alpha beta dependant toggles
+        self.useMoveOrdering = True                 # 5
+        self.useAspirationWindow = True             # 6
+        self.usePrincipalVariationSearch = True     # 7
+
+        # Other important stuff
+        self.depth = None
         self.game = game
         self.evaluator = Evaluator(self.game)
         self.bestscore = 0
@@ -350,6 +351,7 @@ class Bot:
     f"TT hits: {self.tt_hits}"
 )
             print("PVS researches: " + str(self.pvs_researches))
+            self.depth = curr
             self.nodes = 0
             self.tt_hits = 0
             self.qnodes = 1
@@ -621,7 +623,6 @@ class Bot:
                 self.transposition_table[hash_key] = new_entry
 
         return best
-
 
     def findMoveToggle(self, baseDepth, pref=None):
         if self.useIterativeDeepening:

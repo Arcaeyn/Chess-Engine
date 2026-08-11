@@ -76,6 +76,7 @@ bot2 = Bot(game_state)
 bot1.useMoveOrdering = True
 game_state.loadFen(TEST_FENS[random.randint(0, len(TEST_FENS) - 1)])
 
+
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Engine")
 
@@ -374,7 +375,7 @@ while running:
     checkmate = game_state.isCheckmate()
     if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot2.findMoveToggle(3)
+        move = bot2.findMoveToggle(2)
         if move is not None:
             last_move = move
             game_state.movePiece(move)
@@ -382,7 +383,7 @@ while running:
             static_eval = bot2.evaluator.evaluate(game_state)
             print("Current-position evaluation:", static_eval)
             print("Depth-search evaluation:", bot2.eval)
-            end = time.time()  
+            end = time.time() 
 
     best = bot2.eval
     # Handeling keyboard inputs
@@ -474,6 +475,7 @@ while running:
 
     screen.fill((30, 30, 40))
     drawBoard()
+
 
     if last_move is not None:
         highlightSquare(

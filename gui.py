@@ -20,36 +20,6 @@ LIGHT = (232, 239, 255)
 DARK = (120, 142, 191)
 HIGHLIGHT = (80, 80, 120)
 BORDER = (80, 80, 120)
-
-font = pygame.font.Font(None, 28)
-moveSound = pygame.mixer.Sound("sounds/move-self.mp3")
-game_state = GameState()
-bot = Bot(game_state)
-
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Chess Engine")
-class PieceSprite(pygame.sprite.Sprite)
-    def __init__(self, image, rank, file):
-        super().__init__()
-
-        self.image = image
-        self.rect = self.image.get_rect()
-
-        self.rank = rank
-        self.file = file
-        self.square_size = square_size
-
-        self.start_position = self.square_center(rank, file)
-        self.target_position = self.start_position
-
-        self.animation_time = 0
-        self.animation_duration = 200  # milliseconds
-        self.animating = False
-
-        self.rect.center = self.start_position
-
-
-
        
 # Creating a class to handle all graphical user interface aspects
 class Gui:
@@ -74,10 +44,11 @@ class Gui:
         self.dark = DARK
         self.highlight = HIGHLIGHT
         self.border = BORDER
+        self.background = ((30, 30, 40))
 
         # Initialize font, sounds, and screen
         self.font = pygame.font.Font(None, 28)
-        self.move_sound = pygame.mixer.Sound("sounds/move-self.mp3")
+        self.move_sound = pygame.mixer.Sound("assets/sounds/move-self.mp3")
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Chess Engine")
 
@@ -102,7 +73,7 @@ class Gui:
     # Helper functions for drawing our board
     def loadPieceImage(self, filename):
         image = pygame.image.load(
-            f"pieces-basic-png/{filename}"
+            f"assets/pieces-basic-png/{filename}"
         ).convert_alpha()
 
         piece_size = self.square_size - self.padding * 2
@@ -357,12 +328,155 @@ class Gui:
         sign = "+" if eval > 0 else ""
         self.drawText(sign + str(round(eval/100, 2)), board_x - padding - border_radius * 4, board_y + self.board_size + border_radius)
 
-    def draw(self):
-        self.drawBoard()
-        self.drawPieces()
+    def run(self):
+        # Variables for managing game
+        clock = pygame.time.Clock()
+        running = True
+        playing = True
+        selected = False
+        selected_rank = None
+        selected_file = None
+        last_move = None
+        moveIndex = -1
 
-    def animateMove(self, move : Move):
+        while running:
+            # Move Handeling
+            checkmate = self.game.isCheckmate()
+            draw = self.game.isDraw()
+
+            if not checkmate and not draw:
+                # Black plays as bot
+                if not self.game.white_to_move:
+                    move = self.bot.findMoveToggle(4)
+                    self.game.movePiece(move)
+                    self.move_sound.play()
+
+                eval = self.bot.evaluator.evaluate(self.game)
+
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+                # Undo Move
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_LEFT:
+                        playing = False
+                        # We need to check if there are any moves for us to undo 
+                        if last_move and len(self.game.move_history) >= 1:
+                            self.game.undoMove(self.game.move_history[moveIndex])
+                            moveIndex -= 1
+
+                    if event.key == pygame.K_RIGHT and not playing:
+
+                        # We need to check if there are any moves for us to undo 
+                        if last_move and len(self.game.move_history) >= 1:
+                            last_move = self.game.move_history[-1]
+                            self.game.movePiece(self.game.move_history[moveIndex])
+                            self.move_sound.play()
+                            moveIndex += 1
+
+                        # If we are back to our current move we are running again
+                        if moveIndex == len(self.game.move_history) - 1:
+                            playing = True
+
+                # Moves
+                elif event.type == pygame.MOUSEBUTTONDOWN and playing:
+                    if event.button != 1:
+                        continue
         
+                    clicked_square = self.mouseToSquare(*event.pos)
+        
+                    if clicked_square is None:
+                        selected = False
+                        continue
+        
+                    clicked_rank, clicked_file = clicked_square
+        
+                    # Nothing is currently selected.
+                    if not selected:
+                        expected_color = "w" if self.game.white_to_move else "b"
+        
+                        clicked_color = self.game.pieceColor(
+                            clicked_rank,
+                            clicked_file,
+                        )
+        
+                        if clicked_color == expected_color:
+                            selected_rank = clicked_rank
+                            selected_file = clicked_file
+                            selected = True
+        
+                    # A piece is already selected, so create a Move.
+                    else:
+                        # If a pawn is promoting we need to make it a queen
+                        piece = self.game.getPiece(selected_rank, selected_file)
+                        if "pawn" in piece and (clicked_rank == 8 or clicked_rank == 1):
+                            move = Move(
+                                start_rank=selected_rank,
+                                start_file=selected_file,
+                                end_rank=clicked_rank,
+                                end_file=clicked_file,
+                                promotion=piece[:5] + "_queens"
+                        )
+                        # Otherwise we can just make a nomral move
+                        else:
+                            move = Move(
+                                start_rank=selected_rank,
+                                start_file=selected_file,
+                                end_rank=clicked_rank,
+                                end_file=clicked_file)
+        
+        
+                        # Clicking the selected square deselects it.
+                        if (
+                            move.start_rank == move.end_rank
+                            and move.start_file == move.end_file
+                        ):
+                            selected = False
+                            continue
+        
+                        if self.game.moveIsLegal(move):
+                            self.game.movePiece(move)
+                            self.move_sound.play()
+                            moveIndex += 1
+                            last_move = move
+        
+                        selected = False
+
+            # Draw background and board
+            self.screen.fill(self.background)
+            self.drawBoard()
+
+            # Highlightignn move squares
+            if last_move is not None:
+                self.highlightSquare(last_move.start_rank, last_move.start_file)
+                self.highlightSquare(last_move.end_rank, last_move.end_file)
+
+            # Highlight legal moves
+            if selected:
+                legalMoves = self.game.getLegalMoves(selected_rank, selected_file)
+                self.highlightBitboard(legalMoves)
+                self.highlightSquare(selected_rank, selected_file)
+
+            # Display Checkmates and Draws
+            if checkmate:
+                self.displayCheckmate()
+
+            if draw:
+                self.displayDraw()
+
+            # Now draw the rest of the pieces
+            self.drawPieces()
+            self.evalBar(eval)
+            pygame.display.flip()
+            clock.tick(60)
+
+        pygame.quit()
+
 
         
-        
+game = GameState()
+bot = Bot(game)
+gui = Gui(game, bot)
+gui.run()

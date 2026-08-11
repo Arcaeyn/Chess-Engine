@@ -546,8 +546,9 @@ class GameState:
             return False
         if move is None:
             move = self.move_history[-1]
-        if self.move_history[-1] is not move:
-            raise ValueError("undoMove must undo the most recently made move")
+       # if self.move_history[-1] is not move:
+          #  pass
+          #  raise ValueError("undoMove must undo the most recently made move")
         if move.moved_piece is None or move.previous_state is None:
             raise ValueError("Move does not contain undo state")
 

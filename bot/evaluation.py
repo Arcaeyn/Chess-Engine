@@ -1,9 +1,12 @@
 # evaluation.py
-from gameLogic.board import GameState
+from gameLogic.boardChatGPT import GameState
 import math
 
 class Evaluator:
     def __init__(self, game : GameState):
+        # Toggles
+        self.useMopUp = True
+
         self.game = game
         self.piece_square_tables = {
     "pawnsMid": [
@@ -144,14 +147,23 @@ class Evaluator:
 
     ("black_kings",   self.piece_square_tables["kingsMid"],
                       self.piece_square_tables["kingsEnd"], -1)]
-    
+        self.checkmate_gradient = {1 : 50,
+                               2 : 30, 
+                               3 : 20, 
+                               4 : 0,
+                               5 : 0,
+                               6 : 20,
+                               7 : 30,
+                               8 : 50}
+
     def evaluate(self, game):
         score = 0
 
         material = self.material()
         score += material
         score += self.piece_square()
-        score += self.mopUp(material)
+        if self.useMopUp:
+            score += self.mopUp(material)
         #score += self.mobilty()
 
         return score
@@ -219,25 +231,18 @@ class Evaluator:
         return score
 
     def mopUp(self, material):
-        bonus = 0
-        if self.game.white_to_move:
-            if material > 500 and self.game.occupied.bit_count() < 10:
-                rankW, fileW = self.game.bitboardToSquare(self.game.white_kings)
-                rankB, fileB = self.game.bitboardToSquare(self.game.black_kings)
-                bonus = abs(math.sqrt((rankW - rankB) ** 2 + (fileW - fileB) ** 2)) * 10
+        if abs(material) > 400 and self.game.occupied.bit_count() < 10:
+            wRank, wFile = self.game.bitboardToSquare(self.game.white_kings)
+            bRank, bFile = self.game.bitboardToSquare(self.game.black_kings)
 
-                if self.game.kingInCheck("b"):
-                    bonus -= 50
+            king_distance = max(abs(wRank - bRank),abs(wFile - bFile))
+            king_distance_bonus = (7 - king_distance) * 10
 
-        else:
-            if material < -500 and self.game.occupied.bit_count() < 10:
-                rankW, fileW = self.game.bitboardToSquare(self.game.white_kings)
-                rankB, fileB = self.game.bitboardToSquare(self.game.black_kings)
-                bonus = abs(math.sqrt((rankW - rankB) ** 2 + (fileW - fileB) ** 2)) * -10
+            if material > 0:
+                return self.checkmate_gradient[bRank] + self.checkmate_gradient[bFile] + king_distance_bonus
 
-                if self.game.kingInCheck("w"):
-                    bonus += 50
-                
+            else:
+                return -1 * ((self.checkmate_gradient[wRank] + self.checkmate_gradient[wFile]) + king_distance_bonus)
 
-
-        return bonus
+        return 0
+            

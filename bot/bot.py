@@ -1,5 +1,6 @@
+
 import random
-from gameLogic.board import GameState, Move
+from gameLogic.boardChatGPT import GameState, Move
 from bot.evaluation import Evaluator
 from dataclasses import dataclass
 import time
@@ -19,6 +20,9 @@ class TTEntry:
     flag: int
     best_move: object | None
 
+class SearchTimeout(Exception):
+    pass
+
 class Bot:
     def __init__(self, game : GameState):
         # Statistics
@@ -29,6 +33,7 @@ class Bot:
         self.tt_hits = 0
         self.nodes = 0
         self.pvs_researches = 0
+        self.displayStats = True
 
         # Feature Switching for Search Fucntion
         self.useTranspositionTable = True           # 1            
@@ -61,15 +66,30 @@ class Bot:
             "black_kings": 0,
         }
         self.transposition_table = {}
-        self.aspirationWindow = ASPIRATION_WINDOW
+        self.aspirationWindow = 100
+        self.deadline = None
+        self.time_check_counter = 0
     
     def playRandom(self):
         moves = self.game.generateMoves()
         if len(moves) > 0:
             return moves[random.randint(0, len(moves) - 1)]
-    
+
+    # Check time
+    def checkTime(self, force=False):
+        if self.deadline is None:
+            return
+
+        self.time_check_counter += 1
+
+        # Checking the clock at every node adds some overhead.
+        if force or self.time_check_counter % 256 == 0:
+            if time.perf_counter() >= self.deadline:
+                raise SearchTimeout
+      
     # Mini Max w/ alpha beta pruning
     def miniMax(self, depth, alpha=float("-inf"), beta=float("inf")):
+        self.checkTime()
         self.nodes += 1
 
         original_alpha = alpha
@@ -136,8 +156,10 @@ class Bot:
             best = float("-inf")
             for move in moves:
                 self.game.movePiece(move)
-                score = self.miniMax(depth - 1, alpha, beta)
-                self.game.undoMove(move)
+                try:
+                    score = self.miniMax(depth - 1, alpha, beta)
+                finally:
+                    self.game.undoMove(move)
 
                 if score > best:
                     best = score
@@ -154,8 +176,10 @@ class Bot:
 
             for move in moves:
                 self.game.movePiece(move)
-                score = self.miniMax(depth - 1, alpha, beta)
-                self.game.undoMove(move)
+                try:
+                    score = self.miniMax(depth - 1, alpha, beta)
+                finally:
+                    self.game.undoMove(move)
 
                 if score < best:
                     best = score
@@ -244,34 +268,36 @@ class Bot:
             orderedMoves = moves
 
         # Reorder moves for iterative deepening, if we have a preffered move look at it first
-        if pref is not None and pref in orderedMoves:
-            orderedMoves.remove(pref)
-            orderedMoves.insert(0, pref)
+        if pref is not None:
+            for index, move in enumerate(orderedMoves):
+                if self.sameMove(move, pref):
+                    orderedMoves.insert(0, orderedMoves.pop(index))
+                    break
 
         best = float("-inf") if self.game.white_to_move else float("inf")
         maximizing = self.game.white_to_move
 
         for move in orderedMoves:
+            self.checkTime(force=True)
             self.game.movePiece(move)
-
-            # Toggle for principal variation search
-            if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
-                score = self.searchToggle(depth - 1, alpha, beta)
-                first_move = False
-            else:
-                if maximizing:
-                    score = self.searchToggle(depth - 1, alpha, alpha + 1)
-
-                else:
-                    score = self.searchToggle(depth - 1, beta - 1, beta)
-
-                # If we cause a cutoff research
-                if alpha < score < beta:
-                    self.pvs_researches += 1
+            try:
+                # Toggle for principal variation search
+                if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
                     score = self.searchToggle(depth - 1, alpha, beta)
+                    first_move = False
+                else:
+                    if maximizing:
+                        score = self.searchToggle(depth - 1, alpha, alpha + 1)
 
+                    else:
+                        score = self.searchToggle(depth - 1, beta - 1, beta)
 
-            self.game.undoMove(move)
+                    # If we cause a cutoff research
+                    if alpha < score < beta:
+                        self.pvs_researches += 1
+                        score = self.searchToggle(depth - 1, alpha, beta)
+            finally:
+                self.game.undoMove(move)
 
             if maximizing:
                 if score > best:
@@ -299,67 +325,87 @@ class Bot:
         return best, bestMove
 
     # Iterative Deepening
-    def findBestMove(self, maxDepth):
-        best_move = None
+    def findBestMove(self, maxDepth, maxTime=None):
+        moves = self.game.generateMoves()
+        if not moves:
+            return None
+
+        # If time runs out before depth one finishes, return the first legal move
+        best_move = moves[0]
         previous_score = 0
+        completed_score = self.eval
+        self.deadline = (
+            time.perf_counter() + maxTime
+            if maxTime is not None
+            else None
+        )
+        self.time_check_counter = 0
 
         # Iterative Deepening
-        for curr in range(1, maxDepth + 1):
-            if self.useAspirationWindow and self.useAlphaBetaPruning:
-                if curr == 1:
+        try:
+            for curr in range(1, maxDepth + 1):
+                try:
                     start = time.time()
-                    score, best_move = self.bestMoveAtDepth(curr, best_move)
-                    end = time.time()
+                    if self.useAspirationWindow and self.useAlphaBetaPruning:
+                        if curr == 1:
+                            score, candidate = self.bestMoveAtDepth(curr, best_move)
 
-                # Impliment aspiration windows
-                else:
-                    start = time.time()
-                    window = self.aspirationWindow
-                    alpha = previous_score - window
-                    beta = previous_score  + window
-
-                    while True:
-                        score, candidate = self.bestMoveAtDepth(curr, best_move, alpha, beta)
-
-                        if score <= alpha:
-                            # Fail-low: widen downward
-                            window *= 2
-                            alpha = previous_score - window
-
-                        elif score >= beta:
-                            # Fail-high: widen upward
-                            window *= 2
-                            beta = previous_score + window
-
+                        # Impliment aspiration windows
                         else:
-                            # Score is safely inside the window
-                            best_move = candidate
-                            break
+                            window = self.aspirationWindow
+                            alpha = previous_score - window
+                            beta = previous_score  + window
+
+                            while True:
+                                score, candidate = self.bestMoveAtDepth(curr, best_move, alpha, beta)
+
+                                if score <= alpha:
+                                    # Fail-low: widen downward
+                                    window *= 2
+                                    alpha = previous_score - window
+
+                                elif score >= beta:
+                                    # Fail-high: widen upward
+                                    window *= 2
+                                    beta = previous_score + window
+
+                                else:
+                                    # Score is safely inside the window
+                                    break
+
+                    else:
+                        score, candidate = self.bestMoveAtDepth(curr, best_move)
+
                     end = time.time()
-                
 
+                except SearchTimeout:
+                    if self.displayStats:
+                        print("Search stopped after reaching the maximum thinking time.")
+                    break
+
+                # Only use a move from an iteration that finished completely
+                best_move = candidate
                 previous_score = score
+                completed_score = score
+                if self.displayStats:
+                    print("Spent " + str(round(end - start, 2)) + "(s) exploring " + str(self.nodes) + " nodes of which " + str(self.qnodes) + " were qnodes. " + str(self.qmax) + " reached max Qdepth. Avg Q Depth is " + str(self.qavg/self.qnodes) + " Base Depth is "+ str(curr) + ".")
+                    print(
+    f"TT entries: {len(self.transposition_table)}, "
+        f"TT hits: {self.tt_hits}"
+    )
+                    print("PVS researches: " + str(self.pvs_researches))
+                self.depth = curr
+                self.nodes = 0
+                self.tt_hits = 0
+                self.qnodes = 1
+                self.qmax = 0
+                self.qavg = 0
+                self.pvs_researches = 0
 
-            else:
-                start = time.time()
-                score, best_move = self.bestMoveAtDepth(curr, best_move)
-                end = time.time()
+        finally:
+            self.deadline = None
 
-            print("Spent " + str(round(end - start, 2)) + "(s) exploring " + str(self.nodes) + " nodes of which " + str(self.qnodes) + " were qnodes. " + str(self.qmax) + " reached max Qdepth. Avg Q Depth is " + str(self.qavg/self.qnodes) + " Base Depth is "+ str(curr) + ".")
-            print(
- f"TT entries: {len(self.transposition_table)}, "
-    f"TT hits: {self.tt_hits}"
-)
-            print("PVS researches: " + str(self.pvs_researches))
-            self.depth = curr
-            self.nodes = 0
-            self.tt_hits = 0
-            self.qnodes = 1
-            self.qmax = 0
-            self.qavg = 0
-            self.pvs_researches = 0
-
-        self.eval = score
+        self.eval = completed_score
         return best_move
 
     # Quisence search is pretty cool, basically a search extension for moves that are interesting
@@ -367,7 +413,8 @@ class Bot:
     # This helps make our eval more accurate so that on turns where black has just captured and white was to recapture 
     # next turn we make sure to account for that, it also allows us to explore the most "interesting" moves to a much deeper depth making our engine stronger
     def quiescence(self, alpha=float("-inf"), beta=float("inf"), qdepth = 0):
-
+        self.checkTime()
+        
         # Update node count
         self.nodes += 1
         if qdepth == 1:
@@ -399,11 +446,13 @@ class Bot:
 
             for move in tactical_moves:
                 self.game.movePiece(move)
-                score = self.quiescence(alpha, beta, qdepth + 1)
+                try:
+                    score = self.quiescence(alpha, beta, qdepth + 1)
 
-                # every time we call quisemce we add this 
-                self.qavg += 1
-                self.game.undoMove(move)
+                    # every time we call quisemce we add this 
+                    self.qavg += 1
+                finally:
+                    self.game.undoMove(move)
 
                 if score >= beta:
                     return beta
@@ -430,9 +479,11 @@ class Bot:
 
             for move in tactical_moves:
                 self.game.movePiece(move)
-                score = self.quiescence(alpha, beta, qdepth + 1)
-                self.qavg += 1
-                self.game.undoMove(move)
+                try:
+                    score = self.quiescence(alpha, beta, qdepth + 1)
+                    self.qavg += 1
+                finally:
+                    self.game.undoMove(move)
 
                 if score <= alpha:
                     return alpha
@@ -461,6 +512,7 @@ class Bot:
     # But these little functions will help me enourmously in testing if a feature actually imporves a bot or not.
     def searchToggle(self, depth, alpha=float("-inf"), beta=float("inf")):
         # Update Node Count
+        self.checkTime()
         self.nodes += 1
         original_alpha = alpha
         original_beta = beta
@@ -537,21 +589,21 @@ class Bot:
 
             for move in moves:
                 self.game.movePiece(move)
-                
-                # Toggle for principal variation search
-                if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
-                    score = self.searchToggle(depth - 1, alpha, beta)
-                    first_move = False
-                else:
-                    score = self.searchToggle(depth - 1, alpha, alpha + 1)
-
-                    # The move improved the bound without causing a cutoff,
-                    # so re-search it with the full window for an exact score.
-                    if alpha < score < beta:
-                        self.pvs_researches += 1
+                try:
+                    # Toggle for principal variation search
+                    if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
                         score = self.searchToggle(depth - 1, alpha, beta)
+                        first_move = False
+                    else:
+                        score = self.searchToggle(depth - 1, alpha, alpha + 1)
 
-                self.game.undoMove(move)
+                        # The move improved the bound without causing a cutoff,
+                        # so re-search it with the full window for an exact score.
+                        if alpha < score < beta:
+                            self.pvs_researches += 1
+                            score = self.searchToggle(depth - 1, alpha, beta)
+                finally:
+                    self.game.undoMove(move)
 
                 if score > best:
                     best = score
@@ -570,21 +622,21 @@ class Bot:
 
             for move in moves:
                 self.game.movePiece(move)
-                
-                # Toggle for principal variation search
-                if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
-                    score = self.searchToggle(depth - 1, alpha, beta)
-                    first_move = False
-                else:
-                    score = self.searchToggle(depth - 1, beta - 1, beta)
-
-                    # The move improved the bound without causing a cutoff,
-                    # so re-search it with the full window for an exact score.
-                    if alpha < score < beta:
-                        self.pvs_researches += 1
+                try:
+                    # Toggle for principal variation search
+                    if first_move or not self.usePrincipalVariationSearch or not self.useAlphaBetaPruning:
                         score = self.searchToggle(depth - 1, alpha, beta)
+                        first_move = False
+                    else:
+                        score = self.searchToggle(depth - 1, beta - 1, beta)
 
-                self.game.undoMove(move)
+                        # The move improved the bound without causing a cutoff,
+                        # so re-search it with the full window for an exact score.
+                        if alpha < score < beta:
+                            self.pvs_researches += 1
+                            score = self.searchToggle(depth - 1, alpha, beta)
+                finally:
+                    self.game.undoMove(move)
 
                 if score < best:
                     best = score
@@ -624,12 +676,31 @@ class Bot:
 
         return best
 
-    def findMoveToggle(self, baseDepth, pref=None):
+    def findMoveToggle(self, baseDepth, pref=None, maxTime=None):
         if self.useIterativeDeepening:
-            move = self.findBestMove(baseDepth)
+            move = self.findBestMove(baseDepth, maxTime)
             return move
 
 
         else:
-            score, move = self.bestMoveAtDepth(baseDepth, None)
+            moves = self.game.generateMoves()
+            if not moves:
+                return None
+
+            move = moves[0]
+            self.deadline = (
+                time.perf_counter() + maxTime
+                if maxTime is not None
+                else None
+            )
+            self.time_check_counter = 0
+
+            try:
+                score, move = self.bestMoveAtDepth(baseDepth, None)
+            except SearchTimeout:
+                if self.displayStats:
+                    print("Search stopped after reaching the maximum thinking time.")
+            finally:
+                self.deadline = None
+
             return move

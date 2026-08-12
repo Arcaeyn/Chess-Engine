@@ -3,7 +3,7 @@ import time
 import math
 import random
 
-from gameLogic.board import GameState, Move
+from gameLogic.boardChatGPT import GameState, Move
 from bot.bot import Bot
 
 pygame.init()
@@ -70,11 +70,12 @@ TEST_FENS = [
 
 font = pygame.font.Font(None, 28)
 moveSound = pygame.mixer.Sound("assets/sounds/move-self.mp3")
+captureSound = pygame.mixer.Sound("assets/sounds/capture.mp3")
 game_state = GameState()
 bot1 = Bot(game_state)
 bot2 = Bot(game_state)
-bot1.useMoveOrdering = True
-game_state.loadFen(TEST_FENS[random.randint(0, len(TEST_FENS) - 1)])
+
+game_state.loadFen("1nbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Kkq - 0 1")
 
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -369,21 +370,26 @@ selected_file = None
 last_move = None
 start = 0
 end = 0
+ply = 0
 
 
 while running:
     checkmate = game_state.isCheckmate()
     if not game_state.white_to_move and not checkmate:
         start = time.time()
-        move = bot2.findMoveToggle(2)
+        move = bot2.findMoveToggle(baseDepth=50, maxTime=1)
         if move is not None:
             last_move = move
             game_state.movePiece(move)
-            moveSound.play()
+            if last_move.captured_piece:
+                captureSound.play()
+
+            else:
+                moveSound.play()
+            ply += 1
             static_eval = bot2.evaluator.evaluate(game_state)
-            print("Current-position evaluation:", static_eval)
-            print("Depth-search evaluation:", bot2.eval)
             end = time.time() 
+
 
     best = bot2.eval
     # Handeling keyboard inputs
@@ -400,6 +406,7 @@ while running:
                 selected_rank = None
                 selected_file = None
                 last_move = None
+                ply = 0
 
             # Undo Move
             if event.key == pygame.K_LEFT:
@@ -468,7 +475,11 @@ while running:
 
                 if game_state.moveIsLegal(move):
                     game_state.movePiece(move)
-                    moveSound.play()
+                    if move.captured_piece:
+                        captureSound.play()
+        
+                    else:
+                        moveSound.play()
                     last_move = move
 
                 selected = False
@@ -521,7 +532,7 @@ while running:
 
     screen.blit(turn_label, (100, 20))
     
-    drawText("Depth: " + str(bot2.depth) + "  Time: "  + str(round((end - start), 2)) + "s", 610, 20)
+    drawText("Ply: " + str(ply) + "   Depth: " + str(bot2.depth) + "  Time: "  + str(round((end - start), 2)) + "s", 520, 20)
     evalBar(best)
     if not game_state.white_to_move:
         print(str(round((end - start), 2)))

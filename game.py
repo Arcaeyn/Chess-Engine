@@ -71,11 +71,12 @@ TEST_FENS = [
 font = pygame.font.Font(None, 28)
 moveSound = pygame.mixer.Sound("assets/sounds/move-self.mp3")
 captureSound = pygame.mixer.Sound("assets/sounds/capture.mp3")
+checkSound = pygame.mixer.Sound("assets/sounds/move-check.mp3")
 game_state = GameState()
 bot1 = Bot(game_state)
 bot2 = Bot(game_state)
 
-game_state.loadFen("1nbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Kkq - 0 1")
+game_state.loadFen("rnbqk1nr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Kkq - 0 1")
 
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -381,10 +382,13 @@ while running:
         if move is not None:
             last_move = move
             game_state.movePiece(move)
-            if last_move.captured_piece:
+            if game_state.moveIsLegal(move):
+                game_state.movePiece(move)
+            if move.captured_piece:
                 captureSound.play()
-
-            else:
+            elif game_state.kingInCheck("b") or game_state.kingInCheck("w"):
+                checkSound.play()
+            else: 
                 moveSound.play()
             ply += 1
             static_eval = bot2.evaluator.evaluate(game_state)
@@ -477,6 +481,9 @@ while running:
                     game_state.movePiece(move)
                     if move.captured_piece:
                         captureSound.play()
+
+                    elif game_state.kingInCheck("b") or game_state.kingInCheck("w"):
+                        checkSound.play()
         
                     else:
                         moveSound.play()
